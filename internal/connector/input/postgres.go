@@ -9,8 +9,7 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/gustapinto/from-to/internal"
-
+	"github.com/gustapinto/from-to/internal/connector"
 	"github.com/lib/pq"
 )
 
@@ -91,7 +90,7 @@ func (c *PostgresInputConnector) Setup(config any) error {
 	return nil
 }
 
-func (c *PostgresInputConnector) Listen(out internal.OutputConnector) error {
+func (c *PostgresInputConnector) Listen(out connector.OutputConnector) error {
 	listener := pq.NewListener(c.dsn, 1*time.Second, 10*time.Second, nil)
 	defer listener.Close()
 
@@ -197,7 +196,7 @@ func (c *PostgresInputConnector) setupTable(tx *sql.Tx, table PostgresSetupParam
 	return nil
 }
 
-func (c *PostgresInputConnector) getEvent(id int64) (event internal.Event, err error) {
+func (c *PostgresInputConnector) getEvent(id int64) (event connector.Event, err error) {
 	query := `
 	SELECT
 		fte.id,
@@ -213,20 +212,20 @@ func (c *PostgresInputConnector) getEvent(id int64) (event internal.Event, err e
 
 	row := c.db.QueryRowContext(context.Background(), query, id)
 	if row.Err() != nil {
-		return internal.Event{}, row.Err()
+		return connector.Event{}, row.Err()
 	}
 
 	var data []byte
 	if err := row.Scan(&event.ID, &event.Op, &event.Table, &data, &event.Ts); err != nil {
-		return internal.Event{}, err
+		return connector.Event{}, err
 	}
 
 	if err := json.Unmarshal(data, &event.Row); err != nil {
-		return internal.Event{}, err
+		return connector.Event{}, err
 	}
 
 	if table, exists := c.tableRelation[event.Table]; exists {
-		event.Metadata = internal.EventMetadata{
+		event.Metadata = connector.EventMetadata{
 			Key:      table.KeyColumn,
 			KeyValue: fmt.Sprint(event.Row[table.KeyColumn]),
 			Topic:    table.Topic,

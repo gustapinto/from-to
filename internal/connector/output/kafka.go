@@ -7,7 +7,7 @@ import (
 	"log/slog"
 	"strings"
 
-	"github.com/gustapinto/from-to/internal"
+	"github.com/gustapinto/from-to/internal/connector"
 	"github.com/twmb/franz-go/pkg/kadm"
 	"github.com/twmb/franz-go/pkg/kgo"
 )
@@ -57,7 +57,7 @@ func (c *KafkaOutputConnector) Setup(config any) error {
 	return nil
 }
 
-func (c *KafkaOutputConnector) Publish(event internal.Event) error {
+func (c *KafkaOutputConnector) Publish(event connector.Event) error {
 	value, err := json.Marshal(event)
 	if err != nil {
 		return err

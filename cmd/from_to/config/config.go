@@ -6,9 +6,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/gustapinto/from-to/internal"
-	"github.com/gustapinto/from-to/internal/input"
-	"github.com/gustapinto/from-to/internal/output"
+	"github.com/gustapinto/from-to/internal/connector"
+	"github.com/gustapinto/from-to/internal/connector/input"
+	"github.com/gustapinto/from-to/internal/connector/output"
 	"gopkg.in/yaml.v2"
 )
 
@@ -74,7 +74,7 @@ func LoadConfigFromYamlFile(configPath *string) (*Config, error) {
 	return &config, nil
 }
 
-func GetOutputConnector(outputType string) internal.OutputConnector {
+func GetOutputConnector(outputType string) connector.OutputConnector {
 	switch outputType {
 	case "kafka":
 		return &output.KafkaOutputConnector{}
@@ -104,7 +104,7 @@ func GetOutputConnectorSetupParams(config Config) any {
 	return nil
 }
 
-func GetInputConnector(inputType string) internal.InputConnector {
+func GetInputConnector(inputType string) connector.InputConnector {
 	switch inputType {
 	case "postgres":
 		return &input.PostgresInputConnector{}

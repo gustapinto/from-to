@@ -1,4 +1,4 @@
-package internal
+package connector
 
 type EventMetadata struct {
 	Key      string
@@ -13,16 +13,4 @@ type Event struct {
 	Table    string         `json:"table,omitempty"`
 	Row      map[string]any `json:"row,omitempty"`
 	Metadata EventMetadata  `json:"-"`
-}
-
-type OutputConnector interface {
-	Setup(any) error
-
-	Publish(Event) error
-}
-
-type InputConnector interface {
-	Setup(any) error
-
-	Listen(OutputConnector) error
 }
