@@ -1,0 +1,47 @@
+services:
+  postgres:
+    image: "postgres:17-alpine3.21"
+    container_name: "from-to-postgres"
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: "pg_isready -U from-to-user -d from-to-db"
+      interval: "5s"
+      timeout: "10s"
+      retries: 5
+    environment:
+      POSTGRES_PASSWORD: "from-to-passw"
+      POSTGRES_USER: "from-to-user"
+      POSTGRES_DB: "from-to-db"
+
+  kafka:
+    image: "docker.io/bitnami/kafka:3.8.1"
+    container_name: "from-to-kafka"
+    ports:
+      - "9094:9094"
+    healthcheck:
+      test: nc -z localhost 9092 || exit -1
+      start_period: 15s
+      interval: 5s
+      timeout: 10s
+      retries: 5
+    environment:
+      KAFKA_CFG_NODE_ID: 0
+      KAFKA_CFG_PROCESS_ROLES: "controller,broker"
+      KAFKA_CFG_CONTROLLER_QUORUM_VOTERS: "0@kafka:9093"
+      KAFKA_CFG_LISTENERS: "PLAINTEXT://:9092,CONTROLLER://:9093,EXTERNAL://0.0.0.0:9094"
+      KAFKA_CFG_ADVERTISED_LISTENERS: "PLAINTEXT://:9092,EXTERNAL://localhost:9094"
+      KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP: "CONTROLLER:PLAINTEXT,EXTERNAL:PLAINTEXT,PLAINTEXT:PLAINTEXT"
+      KAFKA_CFG_CONTROLLER_LISTENER_NAMES: "CONTROLLER"
+      KAFKA_CFG_INTER_BROKER_LISTENER_NAME: "PLAINTEXT"
+
+  kafdrop:
+    image: "obsidiandynamics/kafdrop:4.1.0"
+    container_name: "from-to-kafdrop"
+    restart: "on-failure"
+    ports:
+      - "9000:9000"
+    depends_on:
+      - "kafka"
+    environment:
+      KAFKA_BROKERCONNECT: "kafka:9092"
