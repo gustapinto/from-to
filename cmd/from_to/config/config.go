@@ -35,11 +35,8 @@ type Table struct {
 }
 
 type From struct {
-	Name               string   `yaml:"name"`
-	Schema             string   `yaml:"schema"`
-	KeyColumnSeparator string   `yaml:"keyColumnSeparator"`
-	AllowedOperations  []string `yaml:"allowedOperations"`
-	KeyColumn          []string `yaml:"keyColumn"`
+	Name      string `yaml:"name"`
+	KeyColumn string `yaml:"keyColumn"`
 }
 
 type To struct {
@@ -119,6 +116,21 @@ func GetInputConnector(inputType string) internal.InputConnector {
 func GetInputConnectorSetupParams(config Config) any {
 	switch config.Input.Type {
 	case "postgres":
+		tables := make([]input.PostgresSetupParamsTable, len(config.Input.Tables))
+		for i, table := range config.Input.Tables {
+			tables[i] = input.PostgresSetupParamsTable{
+				Name:      table.From.Name,
+				KeyColumn: table.From.KeyColumn,
+				Topic:     table.To.Topic,
+			}
+
+			return &input.PostgresSetupParams{
+				DSN:         config.Input.DSN,
+				PollSeconds: config.Input.PollSeconds,
+				Tables:      tables,
+			}
+		}
+
 		return nil
 	}
 

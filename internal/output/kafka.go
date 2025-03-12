@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"strings"
 
 	"github.com/gustapinto/from-to/internal"
@@ -25,6 +26,7 @@ type KafkaSetupParams struct {
 type KafkaOutputConnector struct {
 	client *kgo.Client
 	adm    *kadm.Client
+	logger *slog.Logger
 }
 
 func (c *KafkaOutputConnector) Setup(config any) error {
@@ -33,47 +35,76 @@ func (c *KafkaOutputConnector) Setup(config any) error {
 		return errors.New("Invalid config type passed to KafkaOutputConnector.Setup(...), expected *KafkaSetupParams")
 	}
 
-	kafkaClient, err := kgo.NewClient(kgo.SeedBrokers(params.BootstrapServers...))
+	client, err := c.setupClient(params.BootstrapServers)
 	if err != nil {
 		return err
 	}
 
-	if err := kafkaClient.Ping(context.Background()); err != nil {
-		return err
-	}
-
-	kafkaAdminClient := kadm.NewClient(kafkaClient)
+	c.client = client
+	c.adm = kadm.NewClient(client)
+	c.logger = slog.With("connector", "KafkaOutputConnector")
 
 	for _, topic := range params.Topics {
-		_, err := kafkaAdminClient.CreateTopic(
-			context.Background(),
-			topic.Partitions,
-			topic.ReplicationFactor,
-			map[string]*string{},
-			topic.Name)
-		if err != nil {
-			if strings.Contains(err.Error(), "TOPIC_ALREADY_EXISTS") {
-				continue
-			}
-
+		if err := c.setupTopic(topic); err != nil {
 			return err
 		}
+
+		c.logger.Debug("Topic setup completed", "topic", topic.Name)
 	}
+
+	c.logger.Info("Connector setup completed")
 
 	return nil
 }
 
-func (c *KafkaOutputConnector) Publish(row internal.Row) error {
-	value, err := json.Marshal(row.Data)
+func (c *KafkaOutputConnector) Publish(event internal.Event) error {
+	value, err := json.Marshal(event)
 	if err != nil {
 		return err
 	}
 
 	record := kgo.Record{
-		Key:   []byte(row.Key),
+		Key:   []byte(event.Metadata.KeyValue),
 		Value: value,
-		Topic: row.Topic,
+		Topic: event.Metadata.Topic,
 	}
 
-	return c.client.ProduceSync(context.Background(), &record).FirstErr()
+	if err := c.client.ProduceSync(context.Background(), &record).FirstErr(); err != nil {
+		return err
+	}
+
+	c.logger.Debug("Row published", "key", string(record.Key), "topic", event.Metadata.Topic, "value", value)
+
+	return nil
+}
+
+func (c *KafkaOutputConnector) setupClient(bootstrapServers []string) (*kgo.Client, error) {
+	client, err := kgo.NewClient(kgo.SeedBrokers(bootstrapServers...))
+	if err != nil {
+		return nil, err
+	}
+
+	if err := client.Ping(context.Background()); err != nil {
+		return nil, err
+	}
+
+	return client, nil
+}
+
+func (c *KafkaOutputConnector) setupTopic(topic KafkaTopic) error {
+	_, err := c.adm.CreateTopic(
+		context.Background(),
+		topic.Partitions,
+		topic.ReplicationFactor,
+		map[string]*string{},
+		topic.Name)
+	if err != nil {
+		if strings.Contains(err.Error(), "TOPIC_ALREADY_EXISTS") {
+			return nil
+		}
+
+		return err
+	}
+
+	return nil
 }

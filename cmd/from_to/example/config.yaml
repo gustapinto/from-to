@@ -1,19 +1,11 @@
 input:
   type: "postgres"
-  dsn: "postgres://from-to-user:from-to-passw@localhost:5432/from-to-db"
+  dsn: "postgres://from-to-user:from-to-passw@localhost:5432/from-to-db?sslmode=disable"
   pollSeconds: 10
   tables:
     - from:
-        schema: "public"
         name: "sales"
-        # If more than one column is provided their value will be joined using the keyColumnSeprator config (default=":")
-        keyColumn:
-          - "id"
-        keyColumnSeprator: ":"
-        allowedOperations:
-          - "INSERT"
-          - "UPDATE"
-          - "DELETE"
+        keyColumn: "id"
       to:
         topic: "public_sales"
         partitions: 3

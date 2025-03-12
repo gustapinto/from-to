@@ -3,6 +3,7 @@ module github.com/gustapinto/from-to
 go 1.24.1
 
 require (
+	github.com/lib/pq v1.10.9
 	github.com/twmb/franz-go v1.18.1
 	github.com/twmb/franz-go/pkg/kadm v1.15.0
 	gopkg.in/yaml.v2 v2.4.0
