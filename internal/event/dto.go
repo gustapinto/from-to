@@ -1,9 +1,10 @@
-package connector
+package event
 
 type EventMetadata struct {
 	Key      string
 	KeyValue string
 	Topic    string
+	Mapper   Mapper
 }
 
 type Event struct {

@@ -10,6 +10,10 @@ input:
         topic: "public_sales"
         partitions: 3
         replicationFactor: 1
+      mapper:
+        type: "lua"
+        filePath: "./mappers.lua"
+        function: "map_sales_event"
 
 output:
   type: "kafka"

@@ -1,80 +1,64 @@
-package input
+package postgres
 
 import (
 	"context"
 	"database/sql"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log/slog"
 	"time"
 
-	"github.com/gustapinto/from-to/internal/connector"
+	"github.com/gustapinto/from-to/internal/event"
 	"github.com/lib/pq"
 )
 
-type PostgresSetupParamsTable struct {
-	Name      string
-	KeyColumn string
-	Topic     string
-}
-
-type PostgresSetupParams struct {
-	DSN         string
-	PollSeconds int64
-	Tables      []PostgresSetupParamsTable
-}
-
-type PostgresInputConnector struct {
+type Postgres struct {
 	dsn           string
 	waitSeconds   time.Duration
 	db            *sql.DB
 	logger        *slog.Logger
-	tableRelation map[string]PostgresSetupParamsTable
+	tableRelation map[string]SetupParamsTable
 }
 
-func (c *PostgresInputConnector) Setup(config any) error {
-	params, ok := config.(*PostgresSetupParams)
-	if !ok {
-		return errors.New("Invalid config type passed to PostgresInputConnector.Setup(...), expected *PostgresSetupParamsTable")
+func NewListener(params SetupParams) (c *Postgres, err error) {
+	c = &Postgres{
+		dsn:           params.DSN,
+		waitSeconds:   time.Duration(params.PollSeconds) * time.Second,
+		logger:        slog.With("listener", "Postgres"),
+		tableRelation: make(map[string]SetupParamsTable),
 	}
 
-	db, err := sql.Open("postgres", params.DSN)
+	c.db, err = sql.Open("postgres", params.DSN)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	if err := db.Ping(); err != nil {
-		return err
+	if err := c.db.Ping(); err != nil {
+		return nil, err
 	}
-
-	c.dsn = params.DSN
-	c.waitSeconds = time.Duration(params.PollSeconds) * time.Second
-	c.db = db
-	c.logger = slog.With("connector", "PostgresInputConnector")
 
 	c.logger.Debug("Connected to database", "dsn", params.DSN)
 
 	tx, err := c.db.Begin()
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	if err := c.setupEventsTable(tx); err != nil {
 		tx.Rollback()
-		return err
+		return nil, err
 	}
 
 	c.logger.Debug("Schema and trigger setup complete")
 
 	for _, table := range params.Tables {
 		if c.tableRelation == nil {
-			c.tableRelation = make(map[string]PostgresSetupParamsTable)
+			c.tableRelation = make(map[string]SetupParamsTable)
 		}
 
 		if err := c.setupTable(tx, table); err != nil {
 			tx.Rollback()
-			return err
+			return nil, err
 		}
 
 		c.logger.Debug("Table setup complete", "table", table.Name)
@@ -82,15 +66,16 @@ func (c *PostgresInputConnector) Setup(config any) error {
 	}
 
 	if err := tx.Commit(); err != nil {
-		return err
+		return nil, err
 	}
 
 	c.logger.Info("Connector setup completed")
 
-	return nil
+	return c, nil
 }
 
-func (c *PostgresInputConnector) Listen(out connector.OutputConnector) error {
+// func (c *Postgres) Listen(out output.Connector) error {
+func (c *Postgres) Listen(callback func(event.Event) error) error {
 	listener := pq.NewListener(c.dsn, 1*time.Second, 10*time.Second, nil)
 	defer listener.Close()
 
@@ -117,7 +102,7 @@ func (c *PostgresInputConnector) Listen(out connector.OutputConnector) error {
 
 			c.logger.Debug("Row processed into event", "event", event)
 
-			if err := out.Publish(event); err != nil {
+			if err := callback(event); err != nil {
 				c.logger.Error("Failed to publish event", "error", err)
 				continue
 			}
@@ -132,7 +117,7 @@ func (c *PostgresInputConnector) Listen(out connector.OutputConnector) error {
 	}
 }
 
-func (c *PostgresInputConnector) setupEventsTable(tx *sql.Tx) error {
+func (c *Postgres) setupEventsTable(tx *sql.Tx) error {
 	query := `
 	CREATE TABLE IF NOT EXISTS "from_to_event" (
 		"id" BIGSERIAL PRIMARY KEY,
@@ -178,7 +163,7 @@ func (c *PostgresInputConnector) setupEventsTable(tx *sql.Tx) error {
 	return nil
 }
 
-func (c *PostgresInputConnector) setupTable(tx *sql.Tx, table PostgresSetupParamsTable) error {
+func (c *Postgres) setupTable(tx *sql.Tx, table SetupParamsTable) error {
 	query := `
 	CREATE OR REPLACE TRIGGER %s
 	AFTER INSERT OR UPDATE OR DELETE ON %s
@@ -196,7 +181,7 @@ func (c *PostgresInputConnector) setupTable(tx *sql.Tx, table PostgresSetupParam
 	return nil
 }
 
-func (c *PostgresInputConnector) getEvent(id int64) (event connector.Event, err error) {
+func (c *Postgres) getEvent(id int64) (e event.Event, err error) {
 	query := `
 	SELECT
 		fte.id,
@@ -212,25 +197,25 @@ func (c *PostgresInputConnector) getEvent(id int64) (event connector.Event, err 
 
 	row := c.db.QueryRowContext(context.Background(), query, id)
 	if row.Err() != nil {
-		return connector.Event{}, row.Err()
+		return event.Event{}, row.Err()
 	}
 
 	var data []byte
-	if err := row.Scan(&event.ID, &event.Op, &event.Table, &data, &event.Ts); err != nil {
-		return connector.Event{}, err
+	if err := row.Scan(&e.ID, &e.Op, &e.Table, &data, &e.Ts); err != nil {
+		return event.Event{}, err
 	}
 
-	if err := json.Unmarshal(data, &event.Row); err != nil {
-		return connector.Event{}, err
+	if err := json.Unmarshal(data, &e.Row); err != nil {
+		return event.Event{}, err
 	}
 
-	if table, exists := c.tableRelation[event.Table]; exists {
-		event.Metadata = connector.EventMetadata{
+	if table, exists := c.tableRelation[e.Table]; exists {
+		e.Metadata = event.EventMetadata{
 			Key:      table.KeyColumn,
-			KeyValue: fmt.Sprint(event.Row[table.KeyColumn]),
+			KeyValue: fmt.Sprint(e.Row[table.KeyColumn]),
 			Topic:    table.Topic,
 		}
 	}
 
-	return event, nil
+	return e, nil
 }

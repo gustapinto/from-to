@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"github.com/gustapinto/from-to/cmd/from_to/config"
+	"github.com/gustapinto/from-to/internal/event"
 )
 
 func main() {
@@ -28,36 +29,24 @@ func main() {
 
 	slog.Info("Loaded application config from file", "configPath", *configPath)
 
-	out := config.GetOutputConnector(cfg.Output.Type)
-	outSetupParams := config.GetOutputConnectorSetupParams(*cfg)
-
-	if out == nil || outSetupParams == nil {
-		slog.Error("Failed to identify output connector from config", "error", err.Error())
+	listener, err := config.GetListener(*cfg)
+	if err != nil {
+		slog.Error("Failed to setup output connector from config", "error", err.Error())
 		os.Exit(1)
 	}
 
-	if err := out.Setup(outSetupParams); err != nil {
-		slog.Error("Failed to setup output connector", "error", err.Error())
+	publisher, err := config.GetPublisher(*cfg)
+	if err != nil {
+		slog.Error("Failed to setup output connector from config", "error", err.Error())
 		os.Exit(1)
 	}
 
-	in := config.GetInputConnector(cfg.Input.Type)
-	inSetupParams := config.GetInputConnectorSetupParams(*cfg)
-
-	if in == nil || inSetupParams == nil {
-		slog.Error("Failed to identify input connector from config", "error", err.Error())
-		os.Exit(1)
-	}
-
-	if err := in.Setup(inSetupParams); err != nil {
-		slog.Error("Failed to setup input connector", "error", err.Error())
-		os.Exit(1)
-	}
+	processor := event.NewProcessor(listener, publisher)
 
 	slog.Info("Application started, listening for new rows to process")
 
-	if err := in.Listen(out); err != nil {
-		slog.Error("Failed to listen for new rows", "error", err.Error())
+	if err := processor.ListenAndProcess(); err != nil {
+		slog.Error("Failed to listen and process to events", "error", err.Error())
 		os.Exit(1)
 	}
 }
