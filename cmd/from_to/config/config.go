@@ -115,6 +115,10 @@ func GetListener(config Config) (event.Listener, error) {
 				keyColumn = table.From.KeyColumn
 			}
 
+			if _, err := os.Stat(table.Mapper.FilePath); errors.Is(err, os.ErrNotExist) {
+				return nil, fmt.Errorf("input.tables[%d].mapper.filePath does not exists", i)
+			}
+
 			tables[i] = postgres.SetupParamsTable{
 				Name:      table.From.Name,
 				KeyColumn: keyColumn,

@@ -86,6 +86,11 @@ func (c *Listener) Listen(callback func(event.Event) error) error {
 	for {
 		select {
 		case n := <-listener.Notify:
+			if n == nil {
+				c.logger.Error("Failed to process nil row")
+				continue
+			}
+
 			var id int64
 			if err := json.Unmarshal([]byte(n.Extra), &id); err != nil {
 				c.logger.Error("Failed to process received row", "error", err)

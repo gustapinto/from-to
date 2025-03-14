@@ -5,9 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 
+	"github.com/cjoudrey/gluahttp"
 	"github.com/gustapinto/from-to/internal/event"
 	lua "github.com/yuin/gopher-lua"
+	luajson "layeh.com/gopher-json"
 )
 
 type Mapper struct {
@@ -23,6 +26,9 @@ func NewMapper() (*Mapper, error) {
 func (m *Mapper) Map(e event.Event) ([]byte, error) {
 	l := lua.NewState()
 	defer l.Close()
+
+	l.PreloadModule("http", gluahttp.NewHttpModule(&http.Client{}).Loader)
+	l.PreloadModule("json", luajson.Loader)
 
 	if err := l.DoFile(e.Metadata.Lua.FilePath); err != nil {
 		return nil, err

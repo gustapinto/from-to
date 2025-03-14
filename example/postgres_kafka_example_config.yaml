@@ -13,7 +13,7 @@ input:
       mapper: # (Optional, default=null)
         type: "lua"
         filePath: "./example/mappers.lua"
-        function: "map_sales_event"
+        function: "map_sales_event_with_http"
 
 output:
   connector: "kafka"

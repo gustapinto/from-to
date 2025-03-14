@@ -43,3 +43,11 @@ output:
   connector: "kafka"
   bootstrapServers: "localhost:9094"
 ```
+## Lua support
+
+**FromTo** supports [Lua](https://www.lua.org/) scripting to create row mappers, an example mapper can be found at [example/mappers.lua](https://github.com/gustapinto/from-to/blob/main/example/mappers.lua). It uses the [yuin/gopher-lua](https://github.com/yuin/gopher-lua?tab=readme-ov-file#differences-between-lua-and-gopherlua) VM and preloads some of its libraries for improved DX.
+
+### Preloaded libraries
+
+- [cjoudrey/gluahttp](https://github.com/cjoudrey/gluahttp)
+- [layeh.com/gopher-json](https://github.com/layeh/gopher-json)
