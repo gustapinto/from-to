@@ -16,26 +16,30 @@
 ## Example usage
 
 ```bash
-./from_to_linux_amd64 -config=example_config.yaml
+./from_to_linux_amd64 -config=./postgres_kafka_example_config.yaml
 ```
 
 ## Example config
 
 ```yaml
 input:
-  type: "postgres"
+  connector: "postgres"
   dsn: "postgres://from-to-user:from-to-passw@localhost:5432/from-to-db?sslmode=disable"
-  pollSeconds: 10
+  pollSeconds: 10 # (Optional, default=30)
   tables:
     - from:
         name: "sales"
-        keyColumn: "id"
+        keyColumn: "id" # (Optional, default="id")
       to:
         topic: "public_sales"
-        partitions: 3
-        replicationFactor: 1
+        partitions: 3 # (Optional, default=3)
+        replicationFactor: 1 # (Optional, default=1)
+      mapper: # (Optional, default=null)
+        type: "lua"
+        filePath: "./example/mappers.lua"
+        function: "map_sales_event"
 
 output:
-  type: "kafka"
+  connector: "kafka"
   bootstrapServers: "localhost:9094"
 ```

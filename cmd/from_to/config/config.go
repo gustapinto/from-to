@@ -110,9 +110,14 @@ func GetListener(config Config) (event.Listener, error) {
 				return nil, err
 			}
 
+			keyColumn := "id"
+			if !isEmpty(table.From.KeyColumn) {
+				keyColumn = table.From.KeyColumn
+			}
+
 			tables[i] = postgres.SetupParamsTable{
 				Name:      table.From.Name,
-				KeyColumn: table.From.KeyColumn,
+				KeyColumn: keyColumn,
 				EventMetadata: event.Config{
 					Mapper: mapper,
 					Lua: event.LuaConfig{
