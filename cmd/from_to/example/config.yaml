@@ -1,5 +1,5 @@
 input:
-  type: "postgres"
+  connector: "postgres"
   dsn: "postgres://from-to-user:from-to-passw@localhost:5432/from-to-db?sslmode=disable"
   pollSeconds: 10
   tables:
@@ -12,9 +12,10 @@ input:
         replicationFactor: 1
       mapper:
         type: "lua"
-        filePath: "./mappers.lua"
+        filePath: "./example/mappers.lua"
         function: "map_sales_event"
 
+# The input configuration
 output:
-  type: "kafka"
+  connector: "kafka"
   bootstrapServers: "localhost:9094"

@@ -30,7 +30,7 @@ func (s *Processor) ListenAndProcess() error {
 		if event.Metadata.Mapper != nil {
 			payload, err = event.Metadata.Mapper.Map(event)
 			if err != nil {
-				return fmt.Errorf("failed to map event payload, eventId=%d", event.ID)
+				return fmt.Errorf("failed to map event payload, eventId=%d, error=%s", event.ID, err.Error())
 			}
 		} else {
 			payload, err = json.Marshal(event)

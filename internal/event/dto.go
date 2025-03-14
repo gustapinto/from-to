@@ -1,10 +1,22 @@
 package event
 
-type EventMetadata struct {
+type KafkaConfig struct {
+	Topic string
+}
+
+type LuaConfig struct {
+	FilePath string
+	Function string
+}
+
+type Config struct {
 	Key      string
 	KeyValue string
-	Topic    string
 	Mapper   Mapper
+
+	// Connector/Mapper specific stuff
+	Lua   LuaConfig
+	Kafka KafkaConfig
 }
 
 type Event struct {
@@ -13,5 +25,5 @@ type Event struct {
 	Op       string         `json:"op,omitempty"`
 	Table    string         `json:"table,omitempty"`
 	Row      map[string]any `json:"row,omitempty"`
-	Metadata EventMetadata  `json:"-"`
+	Metadata Config         `json:"-"`
 }

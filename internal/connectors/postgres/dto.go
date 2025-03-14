@@ -1,9 +1,11 @@
 package postgres
 
+import "github.com/gustapinto/from-to/internal/event"
+
 type SetupParamsTable struct {
-	Name      string
-	KeyColumn string
-	Topic     string
+	Name          string
+	KeyColumn     string
+	EventMetadata event.Config
 }
 
 type SetupParams struct {

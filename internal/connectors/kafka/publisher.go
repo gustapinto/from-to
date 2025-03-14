@@ -75,14 +75,14 @@ func (c *Publisher) Publish(e event.Event, payload []byte) error {
 	record := kgo.Record{
 		Key:   []byte(e.Metadata.KeyValue),
 		Value: payload,
-		Topic: e.Metadata.Topic,
+		Topic: e.Metadata.Kafka.Topic,
 	}
 
 	if err := c.client.ProduceSync(context.Background(), &record).FirstErr(); err != nil {
 		return err
 	}
 
-	c.logger.Debug("Row published", "key", string(record.Key), "topic", e.Metadata.Topic, "payload", string(payload))
+	c.logger.Debug("Row published", "key", string(record.Key), "topic", e.Metadata.Kafka.Topic, "payload", string(payload))
 
 	return nil
 }

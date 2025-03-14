@@ -210,10 +210,12 @@ func (c *Postgres) getEvent(id int64) (e event.Event, err error) {
 	}
 
 	if table, exists := c.tableRelation[e.Table]; exists {
-		e.Metadata = event.EventMetadata{
+		e.Metadata = event.Config{
 			Key:      table.KeyColumn,
 			KeyValue: fmt.Sprint(e.Row[table.KeyColumn]),
-			Topic:    table.Topic,
+			Mapper:   table.EventMetadata.Mapper,
+			Kafka:    table.EventMetadata.Kafka,
+			Lua:      table.EventMetadata.Lua,
 		}
 	}
 

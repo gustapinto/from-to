@@ -10,6 +10,7 @@ import (
 	"github.com/gustapinto/from-to/internal/connectors/kafka"
 	"github.com/gustapinto/from-to/internal/connectors/postgres"
 	"github.com/gustapinto/from-to/internal/event"
+	"github.com/gustapinto/from-to/internal/mappers/lua"
 	"gopkg.in/yaml.v2"
 )
 
@@ -25,14 +26,14 @@ type Config struct {
 }
 
 type Input struct {
-	Type        string  `yaml:"type"`
+	Connector   string  `yaml:"connector"`
 	DSN         string  `yaml:"dsn"`
 	PollSeconds *int64  `yaml:"pollSeconds"`
 	Tables      []Table `yaml:"tables"`
 }
 
 type Output struct {
-	Type             string `yaml:"type"`
+	Connector        string `yaml:"connector"`
 	BootstrapServers string `yaml:"bootstrapServers"`
 }
 
@@ -48,9 +49,9 @@ type To struct {
 }
 
 type Table struct {
-	From   From    `yaml:"from"`
-	To     To      `yaml:"to"`
-	Mapper *Mapper `yaml:"mapper"`
+	From   From   `yaml:"from"`
+	To     To     `yaml:"to"`
+	Mapper Mapper `yaml:"mapper"`
 }
 
 type Mapper struct {
@@ -69,7 +70,7 @@ func LoadConfigFromYamlFile(configPath *string) (*Config, error) {
 }
 
 func GetPublisher(config Config) (event.Publisher, error) {
-	switch config.Output.Type {
+	switch config.Output.Connector {
 	case TypeKafka:
 		topics := make([]kafka.Topic, len(config.Input.Tables))
 		for i, table := range config.Input.Tables {
@@ -100,14 +101,28 @@ func GetPublisher(config Config) (event.Publisher, error) {
 }
 
 func GetListener(config Config) (event.Listener, error) {
-	switch config.Input.Type {
+	switch config.Input.Connector {
 	case TypePostgres:
 		tables := make([]postgres.SetupParamsTable, len(config.Input.Tables))
 		for i, table := range config.Input.Tables {
+			mapper, err := getMapper(table.Mapper)
+			if err != nil {
+				return nil, err
+			}
+
 			tables[i] = postgres.SetupParamsTable{
 				Name:      table.From.Name,
 				KeyColumn: table.From.KeyColumn,
-				Topic:     table.To.Topic,
+				EventMetadata: event.Config{
+					Mapper: mapper,
+					Lua: event.LuaConfig{
+						FilePath: table.Mapper.FilePath,
+						Function: table.Mapper.Function,
+					},
+					Kafka: event.KafkaConfig{
+						Topic: table.To.Topic,
+					},
+				},
 			}
 		}
 
@@ -124,6 +139,15 @@ func GetListener(config Config) (event.Listener, error) {
 	}
 
 	return nil, errors.New("invalid listener type")
+}
+
+func getMapper(mapper Mapper) (event.Mapper, error) {
+	switch mapper.Type {
+	case TypeLua:
+		return lua.NewMapper()
+	}
+
+	return nil, nil
 }
 
 func isEmpty(str string) bool {
@@ -180,7 +204,7 @@ func validateMapperConfigForLua(mapperPath string, mapper Mapper) error {
 }
 
 func validateInputConfigForPostgres(input Input, outType string) error {
-	if input.Type != TypePostgres {
+	if input.Connector != TypePostgres {
 		return nil
 	}
 
@@ -207,12 +231,10 @@ func validateInputConfigForPostgres(input Input, outType string) error {
 			}
 		}
 
-		if table.Mapper != nil {
-			if isEmpty(table.Mapper.Type) {
-				return newEmptyFieldErr(fmt.Sprintf("input.tables[%d].mapper.type", i))
+		if !isEmpty(table.Mapper.Type) {
+			if err := validateMapperConfigForLua(fmt.Sprintf("input.tables[%d]", i), table.Mapper); err != nil {
+				return err
 			}
-
-			validateMapperConfigForLua(fmt.Sprintf("input.tables[%d]", i), *table.Mapper)
 		}
 	}
 
@@ -220,7 +242,7 @@ func validateInputConfigForPostgres(input Input, outType string) error {
 }
 
 func validateOutputConfigForKafka(out Output) error {
-	if out.Type != TypeKafka {
+	if out.Connector != TypeKafka {
 		return nil
 	}
 
@@ -236,15 +258,15 @@ func validateConfig(config *Config) error {
 		return errors.New("failed to load config")
 	}
 
-	if isEmpty(config.Input.Type) {
-		return newEmptyFieldErr("input.type")
+	if isEmpty(config.Input.Connector) {
+		return newEmptyFieldErr("input.connector")
 	}
 
-	if isEmpty(config.Output.Type) {
-		return newEmptyFieldErr("output.type")
+	if isEmpty(config.Output.Connector) {
+		return newEmptyFieldErr("output.connector")
 	}
 
-	if err := validateInputConfigForPostgres(config.Input, config.Output.Type); err != nil {
+	if err := validateInputConfigForPostgres(config.Input, config.Output.Connector); err != nil {
 		return err
 	}
 
