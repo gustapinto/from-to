@@ -12,7 +12,7 @@ import (
 	"github.com/lib/pq"
 )
 
-type Postgres struct {
+type Listener struct {
 	dsn           string
 	waitSeconds   time.Duration
 	db            *sql.DB
@@ -20,8 +20,8 @@ type Postgres struct {
 	tableRelation map[string]SetupParamsTable
 }
 
-func NewListener(params SetupParams) (c *Postgres, err error) {
-	c = &Postgres{
+func NewListener(params SetupParams) (c *Listener, err error) {
+	c = &Listener{
 		dsn:           params.DSN,
 		waitSeconds:   time.Duration(params.PollSeconds) * time.Second,
 		logger:        slog.With("listener", "Postgres"),
@@ -75,7 +75,7 @@ func NewListener(params SetupParams) (c *Postgres, err error) {
 }
 
 // func (c *Postgres) Listen(out output.Connector) error {
-func (c *Postgres) Listen(callback func(event.Event) error) error {
+func (c *Listener) Listen(callback func(event.Event) error) error {
 	listener := pq.NewListener(c.dsn, 1*time.Second, 10*time.Second, nil)
 	defer listener.Close()
 
@@ -117,7 +117,7 @@ func (c *Postgres) Listen(callback func(event.Event) error) error {
 	}
 }
 
-func (c *Postgres) setupEventsTable(tx *sql.Tx) error {
+func (c *Listener) setupEventsTable(tx *sql.Tx) error {
 	query := `
 	CREATE TABLE IF NOT EXISTS "from_to_event" (
 		"id" BIGSERIAL PRIMARY KEY,
@@ -163,7 +163,7 @@ func (c *Postgres) setupEventsTable(tx *sql.Tx) error {
 	return nil
 }
 
-func (c *Postgres) setupTable(tx *sql.Tx, table SetupParamsTable) error {
+func (c *Listener) setupTable(tx *sql.Tx, table SetupParamsTable) error {
 	query := `
 	CREATE OR REPLACE TRIGGER %s
 	AFTER INSERT OR UPDATE OR DELETE ON %s
@@ -181,7 +181,7 @@ func (c *Postgres) setupTable(tx *sql.Tx, table SetupParamsTable) error {
 	return nil
 }
 
-func (c *Postgres) getEvent(id int64) (e event.Event, err error) {
+func (c *Listener) getEvent(id int64) (e event.Event, err error) {
 	query := `
 	SELECT
 		fte.id,

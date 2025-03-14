@@ -43,7 +43,7 @@ func (m *Mapper) Map(e event.Event) ([]byte, error) {
 
 	m.logger.Debug("Executed lua function", "file", e.Metadata.Lua.FilePath, "function", e.Metadata.Lua.Function)
 
-	result := toGoValue(l.Get(-1))
+	result := m.toGoValue(l.Get(-1))
 	resultMap, ok := result.(map[string]any)
 	if !ok {
 		return nil, errors.New("failed to convert mapped value back to Go")
@@ -59,7 +59,7 @@ func (m *Mapper) Map(e event.Event) ([]byte, error) {
 	return payload, nil
 }
 
-func toGoValue(luaValue lua.LValue) any {
+func (m *Mapper) toGoValue(luaValue lua.LValue) any {
 	switch value := luaValue.(type) {
 	case *lua.LNilType:
 		return nil
@@ -77,14 +77,14 @@ func toGoValue(luaValue lua.LValue) any {
 			data := make(map[string]any)
 			fmt.Print(data)
 			value.ForEach(func(key, value lua.LValue) {
-				keystr := fmt.Sprint(toGoValue(key))
-				data[keystr] = toGoValue(value)
+				keystr := fmt.Sprint(m.toGoValue(key))
+				data[keystr] = m.toGoValue(value)
 			})
 			return data
 		} else {
 			data := make([]any, 0, maxn)
 			for i := 1; i <= maxn; i++ {
-				data = append(data, toGoValue(value.RawGetInt(i)))
+				data = append(data, m.toGoValue(value.RawGetInt(i)))
 			}
 			return data
 		}
@@ -93,7 +93,7 @@ func toGoValue(luaValue lua.LValue) any {
 	}
 }
 
-func toLuaValue(l *lua.LState, value any) lua.LValue {
+func (m *Mapper) toLuaValue(l *lua.LState, value any) lua.LValue {
 	switch v := value.(type) {
 	case string:
 		return lua.LString(v)
@@ -106,14 +106,14 @@ func toLuaValue(l *lua.LState, value any) lua.LValue {
 	case map[string]any:
 		table := l.NewTable()
 		for key, value := range v {
-			table.RawSetString(key, toLuaValue(l, value))
+			table.RawSetString(key, m.toLuaValue(l, value))
 		}
 
 		return table
 	case []any:
 		list := l.NewTable()
 		for i, value := range v {
-			list.RawSet(lua.LNumber(i), toLuaValue(l, value))
+			list.RawSet(lua.LNumber(i), m.toLuaValue(l, value))
 		}
 
 		return list
@@ -131,5 +131,5 @@ func (m *Mapper) eventToLuaTable(l *lua.LState, e event.Event) lua.LValue {
 		"row":   e.Row,
 	}
 
-	return toLuaValue(l, eventMap)
+	return m.toLuaValue(l, eventMap)
 }
