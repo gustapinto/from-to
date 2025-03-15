@@ -13,22 +13,24 @@ import (
 )
 
 type Listener struct {
-	dsn           string
-	waitSeconds   time.Duration
-	db            *sql.DB
-	logger        *slog.Logger
-	tableRelation map[string]SetupParamsTable
+	dsn         string
+	waitSeconds time.Duration
+	db          *sql.DB
+	logger      *slog.Logger
+	// tableRelation          map[string]SetupParamsTable
+	tableToChannelRelation map[string][]event.Channel
 }
 
-func NewListener(params SetupParams) (c *Listener, err error) {
+func NewListener(config Config, channels map[string]event.Channel) (c *Listener, err error) {
 	c = &Listener{
-		dsn:           params.DSN,
-		waitSeconds:   time.Duration(params.PollSeconds) * time.Second,
-		logger:        slog.With("listener", "Postgres"),
-		tableRelation: make(map[string]SetupParamsTable),
+		dsn:                    config.DSN,
+		waitSeconds:            time.Duration(config.PollSeconds) * time.Second,
+		logger:                 slog.With("listener", "Postgres"),
+		tableToChannelRelation: make(map[string][]event.Channel),
+		// tableRelation: make(map[string]SetupParamsTable),
 	}
 
-	c.db, err = sql.Open("postgres", params.DSN)
+	c.db, err = sql.Open("postgres", config.DSN)
 	if err != nil {
 		return nil, err
 	}
@@ -37,7 +39,7 @@ func NewListener(params SetupParams) (c *Listener, err error) {
 		return nil, err
 	}
 
-	c.logger.Debug("Connected to database", "dsn", params.DSN)
+	c.logger.Debug("Connected to database", "dsn", config.DSN)
 
 	tx, err := c.db.Begin()
 	if err != nil {
@@ -51,18 +53,17 @@ func NewListener(params SetupParams) (c *Listener, err error) {
 
 	c.logger.Debug("Schema and trigger setup complete")
 
-	for _, table := range params.Tables {
-		if c.tableRelation == nil {
-			c.tableRelation = make(map[string]SetupParamsTable)
-		}
-
+	for _, table := range config.Tables {
 		if err := c.setupTable(tx, table); err != nil {
 			tx.Rollback()
 			return nil, err
 		}
 
-		c.logger.Debug("Table setup complete", "table", table.Name)
-		c.tableRelation[table.Name] = table
+		c.logger.Debug("Table setup complete", "table", table)
+	}
+
+	for _, channel := range channels {
+		c.tableToChannelRelation[channel.From] = append(c.tableToChannelRelation[channel.From], channel)
 	}
 
 	if err := tx.Commit(); err != nil {
@@ -168,15 +169,15 @@ func (c *Listener) setupEventsTable(tx *sql.Tx) error {
 	return nil
 }
 
-func (c *Listener) setupTable(tx *sql.Tx, table SetupParamsTable) error {
+func (c *Listener) setupTable(tx *sql.Tx, table string) error {
 	query := `
 	CREATE OR REPLACE TRIGGER %s
 	AFTER INSERT OR UPDATE OR DELETE ON %s
 	FOR EACH ROW EXECUTE FUNCTION from_to_process_event()
 	`
 
-	triggerName := fmt.Sprintf("from_to_%s_process_event_trigger", table.Name)
-	query = fmt.Sprintf(query, triggerName, table.Name)
+	triggerName := fmt.Sprintf("from_to_%s_process_event_trigger", table)
+	query = fmt.Sprintf(query, triggerName, table)
 
 	_, err := tx.ExecContext(context.Background(), query)
 	if err != nil {
@@ -214,13 +215,9 @@ func (c *Listener) getEvent(id int64) (e event.Event, err error) {
 		return event.Event{}, err
 	}
 
-	if table, exists := c.tableRelation[e.Table]; exists {
-		e.Metadata = event.Config{
-			Key:      table.KeyColumn,
-			KeyValue: fmt.Sprint(e.Row[table.KeyColumn]),
-			Mapper:   table.EventMetadata.Mapper,
-			Kafka:    table.EventMetadata.Kafka,
-			Lua:      table.EventMetadata.Lua,
+	if channels, exists := c.tableToChannelRelation[e.Table]; exists {
+		for _, channel := range channels {
+			e.Channels = append(e.Channels, channel)
 		}
 	}
 

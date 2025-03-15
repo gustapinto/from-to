@@ -35,13 +35,25 @@ func main() {
 		os.Exit(1)
 	}
 
-	publisher, err := config.GetPublisher(*cfg)
+	publishers, err := config.GetPublishers(*cfg)
 	if err != nil {
-		slog.Error("Failed to setup output connector from config", "error", err.Error())
+		slog.Error("Failed to setup outputs from config", "error", err.Error())
 		os.Exit(1)
 	}
 
-	processor := event.NewProcessor(listener, publisher)
+	mappers, err := config.GetMappers(*cfg)
+	if err != nil {
+		slog.Error("Failed to setup mappers from config", "error", err.Error())
+		os.Exit(1)
+	}
+
+	channels, err := config.GetChannels(*cfg)
+	if err != nil {
+		slog.Error("Failed to setup channels from config", "error", err.Error())
+		os.Exit(1)
+	}
+
+	processor := event.NewProcessor(listener, publishers, mappers, channels)
 
 	slog.Info("Application started, listening for new rows to process")
 

@@ -24,24 +24,36 @@
 ```yaml
 input:
   connector: "postgres"
-  dsn: "postgres://from-to-user:from-to-passw@localhost:5432/from-to-db?sslmode=disable"
-  pollSeconds: 10 # (Optional, default=30)
-  tables:
-    - from:
-        name: "sales"
-        keyColumn: "id" # (Optional, default="id")
-      to:
-        topic: "public_sales"
-        partitions: 3 # (Optional, default=3)
-        replicationFactor: 1 # (Optional, default=1)
-      mapper: # (Optional, default=null)
-        type: "lua"
-        filePath: "./example/mappers.lua"
-        function: "map_sales_event"
+  postgresConfig:
+    dsn: "postgres://from-to-user:from-to-passw@localhost:5432/from-to-db?sslmode=disable"
+    pollSeconds: 10
+    tables:
+      - "sales"
 
-output:
-  connector: "kafka"
-  bootstrapServers: "localhost:9094"
+outputs:
+  salesKafkaOutput:
+    connector: "kafka"
+    kafkaConfig:
+      bootstrapServers:
+        - "localhost:9094"
+      topics:
+        - name: "publicSales"
+          partitions: 3 # (Optional, default=3)
+          replicationFactor: 1 # (Optional, default=1)
+
+mappers:
+  salesMapper:
+    type: "lua"
+    luaConfig:
+      filePath: "./example/mappers.lua"
+      function: "map_sales_event_with_http"
+
+channels:
+  salesChannel:
+    from: "sales"
+    to: "publicSales"
+    output: "salesKafkaOutput"
+    mapper: "salesMapper" # (Optional)
 ```
 ## Lua support
 
