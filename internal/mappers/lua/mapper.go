@@ -14,12 +14,16 @@ import (
 )
 
 type Mapper struct {
-	logger *slog.Logger
+	logger   *slog.Logger
+	filePath string
+	function string
 }
 
-func NewMapper() (*Mapper, error) {
+func NewMapper(config Config) (*Mapper, error) {
 	return &Mapper{
-		logger: slog.With("mapper", "Lua"),
+		logger:   slog.With("mapper", "Lua"),
+		filePath: config.FilePath,
+		function: config.Function,
 	}, nil
 }
 
@@ -30,16 +34,16 @@ func (m *Mapper) Map(e event.Event) ([]byte, error) {
 	l.PreloadModule("http", gluahttp.NewHttpModule(&http.Client{}).Loader)
 	l.PreloadModule("json", luajson.Loader)
 
-	if err := l.DoFile(e.Metadata.Lua.FilePath); err != nil {
+	if err := l.DoFile(m.filePath); err != nil {
 		return nil, err
 	}
 
-	m.logger.Debug("Loaded lua file", "file", e.Metadata.Lua.FilePath)
+	m.logger.Debug("Loaded lua file", "file", m.filePath)
 
 	eventTable := m.eventToLuaTable(l, e)
 
 	err := l.CallByParam(lua.P{
-		Fn:      l.GetGlobal(e.Metadata.Lua.Function).(*lua.LFunction),
+		Fn:      l.GetGlobal(m.function).(*lua.LFunction),
 		NRet:    1,
 		Protect: true,
 	}, eventTable)
@@ -47,7 +51,7 @@ func (m *Mapper) Map(e event.Event) ([]byte, error) {
 		return nil, err
 	}
 
-	m.logger.Debug("Executed lua function", "file", e.Metadata.Lua.FilePath, "function", e.Metadata.Lua.Function)
+	m.logger.Debug("Executed lua function", "file", m.filePath, "function", m.function)
 
 	result := m.toGoValue(l.Get(-1))
 	resultMap, ok := result.(map[string]any)
@@ -60,7 +64,7 @@ func (m *Mapper) Map(e event.Event) ([]byte, error) {
 		return nil, err
 	}
 
-	m.logger.Debug("Converted lua function return to payload", "file", e.Metadata.Lua.FilePath, "function", e.Metadata.Lua.Function, "payload", string(payload))
+	m.logger.Debug("Converted lua function return to payload", "file", m.filePath, "function", m.function, "payload", string(payload))
 
 	return payload, nil
 }
@@ -81,7 +85,6 @@ func (m *Mapper) toGoValue(luaValue lua.LValue) any {
 
 		if isMap {
 			data := make(map[string]any)
-			fmt.Print(data)
 			value.ForEach(func(key, value lua.LValue) {
 				keystr := fmt.Sprint(m.toGoValue(key))
 				data[keystr] = m.toGoValue(value)

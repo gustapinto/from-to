@@ -2,7 +2,6 @@ package config
 
 import (
 	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -21,43 +20,25 @@ var (
 )
 
 type Config struct {
-	Input  Input  `yaml:"input"`
-	Output Output `yaml:"output"`
+	Input    Input                    `yaml:"input"`
+	Outputs  map[string]Output        `yaml:"outputs"`
+	Mappers  map[string]Mapper        `yaml:"mappers"`
+	Channels map[string]event.Channel `yaml:"channels"`
 }
 
 type Input struct {
-	Connector   string  `yaml:"connector"`
-	DSN         string  `yaml:"dsn"`
-	PollSeconds *int64  `yaml:"pollSeconds"`
-	Tables      []Table `yaml:"tables"`
+	Connector      string          `yaml:"connector"`
+	PostgresConfig postgres.Config `yaml:"postgresConfig"`
 }
 
 type Output struct {
-	Connector        string `yaml:"connector"`
-	BootstrapServers string `yaml:"bootstrapServers"`
-}
-
-type From struct {
-	Name      string `yaml:"name"`
-	KeyColumn string `yaml:"keyColumn"`
-}
-
-type To struct {
-	Topic             string `yaml:"topic"`
-	Partitions        int32  `yaml:"partitions"`
-	ReplicationFactor int16  `yaml:"replicationFactor"`
-}
-
-type Table struct {
-	From   From   `yaml:"from"`
-	To     To     `yaml:"to"`
-	Mapper Mapper `yaml:"mapper"`
+	Connector   string       `yaml:"connector"`
+	KafkaConfig kafka.Config `yaml:"kafkaConfig"`
 }
 
 type Mapper struct {
-	Type     string `yaml:"type"`
-	FilePath string `yaml:"filePath"`
-	Function string `yaml:"function"`
+	Type      string     `yaml:"type"`
+	LuaConfig lua.Config `yaml:"luaConfig"`
 }
 
 func LoadConfigFromYamlFile(configPath *string) (*Config, error) {
@@ -69,102 +50,59 @@ func LoadConfigFromYamlFile(configPath *string) (*Config, error) {
 	return config, nil
 }
 
-func GetPublisher(config Config) (event.Publisher, error) {
-	switch config.Output.Connector {
-	case TypeKafka:
-		topics := make([]kafka.Topic, len(config.Input.Tables))
-		for i, table := range config.Input.Tables {
-			partitions := int32(3)
-			if table.To.Partitions != 0 {
-				partitions = table.To.Partitions
-			}
-
-			replicationFactor := int16(1)
-			if table.To.ReplicationFactor != 0 {
-				replicationFactor = table.To.ReplicationFactor
-			}
-
-			topics[i] = kafka.Topic{
-				Name:              table.To.Topic,
-				Partitions:        partitions,
-				ReplicationFactor: replicationFactor,
-			}
-		}
-
-		return kafka.NewPublisher(kafka.SetupParams{
-			BootstrapServers: strings.Split(config.Output.BootstrapServers, ","),
-			Topics:           topics,
-		})
-	}
-
-	return nil, errors.New("invalid publisher type")
-}
-
 func GetListener(config Config) (event.Listener, error) {
 	switch config.Input.Connector {
 	case TypePostgres:
-		tables := make([]postgres.SetupParamsTable, len(config.Input.Tables))
-		for i, table := range config.Input.Tables {
-			mapper, err := getMapper(table.Mapper)
+		return postgres.NewListener(config.Input.PostgresConfig, config.Channels)
+	}
+
+	return nil, errors.New("invalid config type, expected one of: [postgres]")
+}
+
+func GetMappers(config Config) (mappers map[string]event.Mapper, err error) {
+	mappers = make(map[string]event.Mapper)
+
+	for key, m := range config.Mappers {
+		switch m.Type {
+		case TypeLua:
+			mappers[key], err = lua.NewMapper(m.LuaConfig)
 			if err != nil {
 				return nil, err
 			}
-
-			keyColumn := "id"
-			if !isEmpty(table.From.KeyColumn) {
-				keyColumn = table.From.KeyColumn
-			}
-
-			if _, err := os.Stat(table.Mapper.FilePath); errors.Is(err, os.ErrNotExist) {
-				return nil, fmt.Errorf("input.tables[%d].mapper.filePath does not exists", i)
-			}
-
-			tables[i] = postgres.SetupParamsTable{
-				Name:      table.From.Name,
-				KeyColumn: keyColumn,
-				EventMetadata: event.Config{
-					Mapper: mapper,
-					Lua: event.LuaConfig{
-						FilePath: table.Mapper.FilePath,
-						Function: table.Mapper.Function,
-					},
-					Kafka: event.KafkaConfig{
-						Topic: table.To.Topic,
-					},
-				},
-			}
 		}
-
-		pollSeconds := int64(30)
-		if config.Input.PollSeconds != nil {
-			pollSeconds = *config.Input.PollSeconds
-		}
-
-		return postgres.NewListener(postgres.SetupParams{
-			DSN:         config.Input.DSN,
-			PollSeconds: pollSeconds,
-			Tables:      tables,
-		})
 	}
 
-	return nil, errors.New("invalid listener type")
+	return mappers, nil
 }
 
-func getMapper(mapper Mapper) (event.Mapper, error) {
-	switch mapper.Type {
-	case TypeLua:
-		return lua.NewMapper()
+func GetPublishers(config Config) (publishers map[string]event.Publisher, err error) {
+	publishers = make(map[string]event.Publisher)
+
+	for key, o := range config.Outputs {
+		switch o.Connector {
+		case TypeKafka:
+			publishers[key], err = kafka.NewPublisher(o.KafkaConfig)
+			if err != nil {
+				return nil, err
+			}
+		}
 	}
 
-	return nil, nil
+	return publishers, nil
+}
+
+func GetChannels(config Config) (channels map[string]event.Channel, err error) {
+	channels = make(map[string]event.Channel)
+
+	for key, c := range channels {
+		channels[key] = c
+	}
+
+	return channels, nil
 }
 
 func isEmpty(str string) bool {
 	return len(strings.TrimSpace(str)) == 0
-}
-
-func newEmptyFieldErr(field string) error {
-	return fmt.Errorf("missing or empty field [%s]", field)
 }
 
 func getConfigFromFile(configPath string) (*Config, error) {
@@ -194,94 +132,4 @@ func getConfigFromFile(configPath string) (*Config, error) {
 	}
 
 	return &config, nil
-}
-
-func validateMapperConfigForLua(mapperPath string, mapper Mapper) error {
-	if mapper.Type != TypeLua {
-		return nil
-	}
-
-	if isEmpty(mapper.FilePath) {
-		return newEmptyFieldErr(fmt.Sprintf("%s.mapper.filePath", mapperPath))
-	}
-
-	if isEmpty(mapper.Function) {
-		return newEmptyFieldErr(fmt.Sprintf("%s.mapper.function", mapperPath))
-	}
-
-	return nil
-}
-
-func validateInputConfigForPostgres(input Input, outType string) error {
-	if input.Connector != TypePostgres {
-		return nil
-	}
-
-	if isEmpty(input.DSN) {
-		return newEmptyFieldErr("input.dsn")
-	}
-
-	if len(input.Tables) == 0 {
-		return newEmptyFieldErr("input.tables")
-	}
-
-	for i, table := range input.Tables {
-		if isEmpty(table.From.Name) {
-			return newEmptyFieldErr(fmt.Sprintf("input.tables[%d].from.name", i))
-		}
-
-		if isEmpty(table.From.KeyColumn) {
-			return newEmptyFieldErr(fmt.Sprintf("input.tables[%d].from.keyColumn", i))
-		}
-
-		if outType == TypeKafka {
-			if isEmpty(table.To.Topic) {
-				return newEmptyFieldErr(fmt.Sprintf("input.tables[%d].to.topic", i))
-			}
-		}
-
-		if !isEmpty(table.Mapper.Type) {
-			if err := validateMapperConfigForLua(fmt.Sprintf("input.tables[%d]", i), table.Mapper); err != nil {
-				return err
-			}
-		}
-	}
-
-	return nil
-}
-
-func validateOutputConfigForKafka(out Output) error {
-	if out.Connector != TypeKafka {
-		return nil
-	}
-
-	if isEmpty(out.BootstrapServers) {
-		return newEmptyFieldErr("output.bootstrapServers")
-	}
-
-	return nil
-}
-
-func validateConfig(config *Config) error {
-	if config == nil {
-		return errors.New("failed to load config")
-	}
-
-	if isEmpty(config.Input.Connector) {
-		return newEmptyFieldErr("input.connector")
-	}
-
-	if isEmpty(config.Output.Connector) {
-		return newEmptyFieldErr("output.connector")
-	}
-
-	if err := validateInputConfigForPostgres(config.Input, config.Output.Connector); err != nil {
-		return err
-	}
-
-	if err := validateOutputConfigForKafka(config.Output); err != nil {
-		return err
-	}
-
-	return nil
 }

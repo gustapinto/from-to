@@ -2,8 +2,8 @@ package kafka
 
 import (
 	"context"
-	"errors"
 	"log/slog"
+	"strconv"
 	"strings"
 
 	"github.com/gustapinto/from-to/internal/event"
@@ -17,12 +17,12 @@ type Publisher struct {
 	logger *slog.Logger
 }
 
-func NewPublisher(params SetupParams) (c *Publisher, err error) {
+func NewPublisher(config Config) (c *Publisher, err error) {
 	c = &Publisher{
 		logger: slog.With("publisher", "Kafka"),
 	}
 
-	client, err := c.setupClient(params.BootstrapServers)
+	client, err := c.setupClient(config.BootstrapServers)
 	if err != nil {
 		return nil, err
 	}
@@ -30,7 +30,7 @@ func NewPublisher(params SetupParams) (c *Publisher, err error) {
 	c.client = client
 	c.adm = kadm.NewClient(client)
 
-	for _, topic := range params.Topics {
+	for _, topic := range config.Topics {
 		if err := c.setupTopic(topic); err != nil {
 			return nil, err
 		}
@@ -43,46 +43,18 @@ func NewPublisher(params SetupParams) (c *Publisher, err error) {
 	return c, nil
 }
 
-func (c *Publisher) Setup(config any) error {
-	params, ok := config.(*SetupParams)
-	if !ok {
-		return errors.New("Invalid config type passed to output.Kafka.Setup(...), expected *KafkaSetupParams")
-	}
-
-	client, err := c.setupClient(params.BootstrapServers)
-	if err != nil {
-		return err
-	}
-
-	c.client = client
-	c.adm = kadm.NewClient(client)
-	c.logger = slog.With("connector", "Kafka")
-
-	for _, topic := range params.Topics {
-		if err := c.setupTopic(topic); err != nil {
-			return err
-		}
-
-		c.logger.Debug("Topic setup completed", "topic", topic.Name)
-	}
-
-	c.logger.Info("Connector setup completed")
-
-	return nil
-}
-
-func (c *Publisher) Publish(e event.Event, payload []byte) error {
+func (c *Publisher) Publish(e event.Event, payload []byte, topic string) error {
 	record := kgo.Record{
-		Key:   []byte(e.Metadata.KeyValue),
+		Key:   []byte(strconv.Itoa(int(e.ID))),
 		Value: payload,
-		Topic: e.Metadata.Kafka.Topic,
+		Topic: topic,
 	}
 
 	if err := c.client.ProduceSync(context.Background(), &record).FirstErr(); err != nil {
 		return err
 	}
 
-	c.logger.Debug("Row published", "key", string(record.Key), "topic", e.Metadata.Kafka.Topic, "payload", string(payload))
+	c.logger.Debug("Row published", "key", string(record.Key), "topic", topic, "payload", string(payload))
 
 	return nil
 }
@@ -100,7 +72,7 @@ func (c *Publisher) setupClient(bootstrapServers []string) (*kgo.Client, error) 
 	return client, nil
 }
 
-func (c *Publisher) setupTopic(topic Topic) error {
+func (c *Publisher) setupTopic(topic TopicConfig) error {
 	_, err := c.adm.CreateTopic(
 		context.Background(),
 		topic.Partitions,
