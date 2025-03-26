@@ -1,6 +1,18 @@
 input:
   connector: "postgres"
   postgresConfig:
+    # The user must have permission to create tables, triggers, functions and to send Notifications
+    # to an channel using PG_NOTIFY(...)
+    #
+    # The "From To" application will create a "from_to_event" table and triggers for every
+    # configured table on "input.postgresConfig.tables.*" to provide the CDC feature needed for
+    # it to work.
+    #
+    # The "from_to_event" table itself can be configured by you to be unlogged and older entries
+    # can be safely deleted at any moment
+    #
+    # All the DDL and DML queries performed by the "From To" application can be audited at
+    # https://github.com/gustapinto/from-to/blob/main/internal/connectors/postgres/listener.go
     dsn: "postgres://from-to-user:from-to-passw@localhost:5432/from-to-db?sslmode=disable"
     pollSeconds: 10
     tables:
