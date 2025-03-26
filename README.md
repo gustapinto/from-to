@@ -1,4 +1,11 @@
-# FromTo
+# From To
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/gustapinto/from-to/main/docs/images/diagram-dark.jpg">
+  <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/gustapinto/from-to/main/docs/images/diagram-light.jpg">
+  <img src="https://raw.githubusercontent.com/gustapinto/from-to/main/docs/images/diagram-light.jpg">
+</picture>
+
 
 ## Building
 
