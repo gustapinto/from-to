@@ -22,9 +22,14 @@ type Listener struct {
 }
 
 func NewListener(config Config, channels map[string]event.Channel) (*Listener, error) {
+	waitSeconds := time.Duration(config.PollSeconds) * time.Second
+	if waitSeconds == 0 {
+		waitSeconds = time.Duration(30) * time.Second
+	}
+
 	listener := &Listener{
 		dsn:         config.DSN,
-		waitSeconds: time.Duration(config.PollSeconds) * time.Second,
+		waitSeconds: waitSeconds,
 		timeout:     1 * time.Minute,
 		logger:      slog.With("listener", "Postgres"),
 	}
