@@ -6,16 +6,19 @@
   <img src="https://raw.githubusercontent.com/gustapinto/from-to/main/docs/images/diagram-light.jpg">
 </picture>
 
+## Installation
 
-## Building
+The pre-built binaries for **FromTo** are available in the [releases page](https://github.com/gustapinto/from-to/releases), they are the recommended installation option, but you can also compile the code yourself
 
-1. Clone this repository
-2. Open the repository on terminal and run `make build` to build the binaries for all platforms, or `make build/<platform>` to build for an specific platform. Supported platforms:
+### Compiling as binaries
+
+1. To compile **FromTo** first clone this repository in your machine
+2. Then open the cloned folder on a shell and run `make build` to build the binaries for all supported platforms, or run `make build/<platform>` to build for an specific platform. The currently supported platforms are:
    - linux
    - windows
    - macos
 
-### Building Pre Requisites
+#### Building Pre Requisites
 
 1. [Go 1.24+](https://go.dev/)
 2. [GNU Make](https://www.gnu.org/software/make/) (Optional)
@@ -33,7 +36,6 @@ input:
   connector: "postgres"
   postgresConfig:
     dsn: "postgres://from-to-user:from-to-passw@localhost:5432/from-to-db?sslmode=disable"
-    pollSeconds: 10
     tables:
       - "sales"
 
@@ -45,8 +47,6 @@ outputs:
         - "localhost:9094"
       topics:
         - name: "publicSales"
-          partitions: 3 # (Optional, default=3)
-          replicationFactor: 1 # (Optional, default=1)
 
 mappers:
   salesMapper:
@@ -60,8 +60,11 @@ channels:
     from: "sales"
     to: "publicSales"
     output: "salesKafkaOutput"
-    mapper: "salesMapper" # (Optional)
+    mapper: "salesMapper"
 ```
+
+Additional options and specific documentation on inputs, outputs and mappers can be found at the [examples folder](https://github.com/gustapinto/from-to/blob/main/example)
+
 ## Lua support
 
 **FromTo** supports [Lua](https://www.lua.org/) scripting to create row mappers, an example mapper can be found at [example/mappers.lua](https://github.com/gustapinto/from-to/blob/main/example/mappers.lua). It uses the [yuin/gopher-lua](https://github.com/yuin/gopher-lua?tab=readme-ov-file#differences-between-lua-and-gopherlua) VM and preloads some of its libraries for improved DX.
@@ -70,3 +73,14 @@ channels:
 
 - [cjoudrey/gluahttp](https://github.com/cjoudrey/gluahttp)
 - [layeh.com/gopher-json](https://github.com/layeh/gopher-json)
+
+## Development
+
+**FormTo** development follows the [Uber Go Style Guide](https://github.com/uber-go/guide/blob/master/style.md)
+
+### Development Pre Requisites
+
+1. [Go 1.24+](https://go.dev/)
+2. [GNU Make](https://www.gnu.org/software/make/) (Optional)
+3. [Docker](https://www.docker.com/) or an compatible alternative
+4. [Docker Compose](https://docs.docker.com/compose/) or an compatible alternative
