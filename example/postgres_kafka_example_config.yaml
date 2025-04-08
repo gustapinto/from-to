@@ -1,5 +1,5 @@
 input:
-  connector: "postgres"
+  connector: "postgres" # (One of: [postgres])
   postgresConfig:
     # The user must have permission to create tables, triggers, functions and to send Notifications
     # to an channel using PG_NOTIFY(...)
@@ -14,13 +14,13 @@ input:
     # All the DDL and DML queries performed by the "From To" application can be audited at
     # https://github.com/gustapinto/from-to/blob/main/internal/connectors/postgres/listener.go
     dsn: "postgres://from-to-user:from-to-passw@localhost:5432/from-to-db?sslmode=disable"
-    pollSeconds: 10
+    pollSeconds: 30 # (Optional, default=30)
     tables:
       - "sales"
 
 outputs:
   salesKafkaOutput:
-    connector: "kafka"
+    connector: "kafka" # (One of: [kafka])
     kafkaConfig:
       bootstrapServers:
         - "localhost:9094"
@@ -31,7 +31,7 @@ outputs:
 
 mappers:
   salesMapper:
-    type: "lua"
+    type: "lua" # (One of: [lua])
     luaConfig:
       filePath: "./example/mappers.lua"
       function: "map_sales_event_with_http"
