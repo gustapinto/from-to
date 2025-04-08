@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gustapinto/from-to/internal/event"
 	"github.com/twmb/franz-go/pkg/kadm"
@@ -50,11 +51,19 @@ func (c *Publisher) Publish(e event.Event, payload []byte, topic string) error {
 		Topic: topic,
 	}
 
-	if err := c.client.ProduceSync(context.Background(), &record).FirstErr(); err != nil {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+
+	if err := c.client.ProduceSync(ctx, &record).FirstErr(); err != nil {
 		return err
 	}
 
-	c.logger.Debug("Row published", "key", string(record.Key), "topic", topic, "payload", string(payload))
+	c.logger.Debug(
+		"Row published",
+		"key", string(record.Key),
+		"topic", topic,
+		"payload", string(payload),
+	)
 
 	return nil
 }

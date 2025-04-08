@@ -13,10 +13,10 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
-var (
-	TypePostgres = "postgres"
-	TypeKafka    = "kafka"
-	TypeLua      = "lua"
+const (
+	_typePostgres = "postgres"
+	_typeKafka    = "kafka"
+	_typeLua      = "lua"
 )
 
 type Config struct {
@@ -52,7 +52,7 @@ func LoadConfigFromYamlFile(configPath *string) (*Config, error) {
 
 func GetListener(config Config) (event.Listener, error) {
 	switch config.Input.Connector {
-	case TypePostgres:
+	case _typePostgres:
 		return postgres.NewListener(config.Input.PostgresConfig, config.Channels)
 	}
 
@@ -60,11 +60,11 @@ func GetListener(config Config) (event.Listener, error) {
 }
 
 func GetMappers(config Config) (mappers map[string]event.Mapper, err error) {
-	mappers = make(map[string]event.Mapper)
+	mappers = make(map[string]event.Mapper, len(config.Mappers))
 
 	for key, m := range config.Mappers {
 		switch m.Type {
-		case TypeLua:
+		case _typeLua:
 			mappers[key], err = lua.NewMapper(m.LuaConfig)
 			if err != nil {
 				return nil, err
@@ -76,11 +76,11 @@ func GetMappers(config Config) (mappers map[string]event.Mapper, err error) {
 }
 
 func GetPublishers(config Config) (publishers map[string]event.Publisher, err error) {
-	publishers = make(map[string]event.Publisher)
+	publishers = make(map[string]event.Publisher, len(config.Outputs))
 
 	for key, o := range config.Outputs {
 		switch o.Connector {
-		case TypeKafka:
+		case _typeKafka:
 			publishers[key], err = kafka.NewPublisher(o.KafkaConfig)
 			if err != nil {
 				return nil, err
@@ -92,10 +92,12 @@ func GetPublishers(config Config) (publishers map[string]event.Publisher, err er
 }
 
 func GetChannels(config Config) (channels map[string]event.Channel, err error) {
-	channels = make(map[string]event.Channel)
+	channels = make(map[string]event.Channel, len(config.Channels))
 
-	for key, c := range channels {
-		channels[key] = c
+	for key, channel := range config.Channels {
+		channel.Key = key
+
+		channels[key] = channel
 	}
 
 	return channels, nil

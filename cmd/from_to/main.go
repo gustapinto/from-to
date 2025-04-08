@@ -2,6 +2,7 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"log/slog"
 	"os"
 
@@ -10,7 +11,13 @@ import (
 )
 
 func main() {
+	if err := run(); err != nil {
+		slog.Error(err.Error())
+		os.Exit(1)
+	}
+}
 
+func run() error {
 	configPath := flag.String("config", "", "The configuration file path (ex: -config=./example/config.yaml)")
 	isDebug := flag.Bool("debug", false, "Use to enable debug level logging")
 	flag.Parse()
@@ -23,42 +30,34 @@ func main() {
 
 	cfg, err := config.LoadConfigFromYamlFile(configPath)
 	if err != nil {
-		slog.Error("Failed to load config file", "error", err.Error())
-		os.Exit(1)
+		return fmt.Errorf("Failed to load config file, got error %s", err.Error())
 	}
 
 	slog.Info("Loaded application config from file", "configPath", *configPath)
 
 	listener, err := config.GetListener(*cfg)
 	if err != nil {
-		slog.Error("Failed to setup output connector from config", "error", err.Error())
-		os.Exit(1)
+		return fmt.Errorf("Failed to setup output connector from config, got error %s", err.Error())
 	}
 
 	publishers, err := config.GetPublishers(*cfg)
 	if err != nil {
-		slog.Error("Failed to setup outputs from config", "error", err.Error())
-		os.Exit(1)
+		return fmt.Errorf("Failed to setup outputs from config, got error %s", err.Error())
 	}
 
 	mappers, err := config.GetMappers(*cfg)
 	if err != nil {
-		slog.Error("Failed to setup mappers from config", "error", err.Error())
-		os.Exit(1)
+		return fmt.Errorf("Failed to setup mappers from config, got error %s", err.Error())
 	}
 
 	channels, err := config.GetChannels(*cfg)
 	if err != nil {
-		slog.Error("Failed to setup channels from config", "error", err.Error())
-		os.Exit(1)
+		return fmt.Errorf("Failed to setup channels from config, got error %s", err.Error())
 	}
 
 	processor := event.NewProcessor(listener, publishers, mappers, channels)
 
 	slog.Info("Application started, listening for new rows to process")
 
-	if err := processor.ListenAndProcess(); err != nil {
-		slog.Error("Failed to listen and process to events", "error", err.Error())
-		os.Exit(1)
-	}
+	return processor.ListenAndProcess()
 }

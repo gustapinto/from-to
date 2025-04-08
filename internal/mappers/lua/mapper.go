@@ -51,7 +51,11 @@ func (m *Mapper) Map(e event.Event) ([]byte, error) {
 		return nil, err
 	}
 
-	m.logger.Debug("Executed lua function", "file", m.filePath, "function", m.function)
+	m.logger.Debug(
+		"Executed lua function",
+		"file", m.filePath,
+		"function", m.function,
+	)
 
 	result := m.toGoValue(l.Get(-1))
 	resultMap, ok := result.(map[string]any)
@@ -64,7 +68,12 @@ func (m *Mapper) Map(e event.Event) ([]byte, error) {
 		return nil, err
 	}
 
-	m.logger.Debug("Converted lua function return to payload", "file", m.filePath, "function", m.function, "payload", string(payload))
+	m.logger.Debug(
+		"Converted lua function return to payload",
+		"file", m.filePath,
+		"function", m.function,
+		"payload", string(payload),
+	)
 
 	return payload, nil
 }
