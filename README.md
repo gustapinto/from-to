@@ -65,6 +65,15 @@ channels:
 
 Additional options and specific documentation on inputs, outputs and mappers can be found at the [examples folder](https://github.com/gustapinto/from-to/blob/main/example)
 
+## Connector support
+
+The currently supported connectors and mappers are:
+
+- **PostgreSQL (postgres):** Input connector
+- **Kafka (kafka):** Output connector
+- **Webhook (webhook):** Output connector
+- **Lua (lua):** Mapper
+
 ## Lua support
 
 **FromTo** supports [Lua](https://www.lua.org/) scripting to create row mappers, an example mapper can be found at [example/mappers.lua](https://github.com/gustapinto/from-to/blob/main/example/mappers.lua). It uses the [yuin/gopher-lua](https://github.com/yuin/gopher-lua) VM and preloads some of its libraries for improved DX.
