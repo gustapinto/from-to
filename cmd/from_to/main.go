@@ -6,13 +6,13 @@ import (
 	"log/slog"
 	"os"
 
-	"github.com/gustapinto/from-to/cmd/from_to/config"
-	"github.com/gustapinto/from-to/cmd/from_to/logging"
+	"github.com/gustapinto/from-to/internal/config"
 	"github.com/gustapinto/from-to/internal/event"
+	"github.com/gustapinto/from-to/internal/logging"
 )
 
 func main() {
-	configPath := flag.String("config", "from_to.yaml", "The configuration file path")
+	configPath := flag.String("manifest", "from_to.yaml", "The configuration manifest file path")
 	logFormat := flag.String("logFormat", "text", "The logging format, one of [text, json]")
 	noColor := flag.Bool("noColor", false, "Use to disable colored logging, only valid for text logFormat")
 	isDebug := flag.Bool("debug", false, "Use to enable debug level logging")

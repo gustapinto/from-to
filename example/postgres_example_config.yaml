@@ -1,119 +1,124 @@
-# Input source configuration
-input:
-  # Type of input connector. Currently supported: [postgres]
-  connector: "postgres"
+# The manifest version. Currently supported: [1]
+version: 1
 
-  # Configuration for PostgreSQL input. Used only if connector is set to "postgres".
-  #
-  # The "FromTo" application will:
-  # - Create a table named "from_to_event" and necessary triggers for each table listed in input.postgresConfig.tables
-  # - Use these triggers and the event table to enable change polling
-  #
-  # Notes:
-  # - You can make the "from_to_event" table unlogged for performance
-  # - You can delete old events from this table at any time
-  # - You can review the exact SQL queries used here:
-  #   https://github.com/gustapinto/from-to/blob/main/internal/connectors/postgres/queries.go
-  postgresConfig:
-    # PostgreSQL DSN (connection string). The user must have permissions to create tables, triggers, and functions.
-    dsn: "postgres://from-to-user:from-to-passw@localhost:5432/from-to-db?sslmode=disable"
+# The actual configurations
+config:
+  # Input source configuration
+  input:
+    # Type of input connector. Currently supported: [postgres]
+    connector: "postgres"
 
-    # The maximum time that any query should take to complete (default: 30)
-    timeoutSeconds: 5
+    # Configuration for PostgreSQL input. Used only if connector is set to "postgres".
+    #
+    # The "FromTo" application will:
+    # - Create a table named "from_to_event" and necessary triggers for each table listed in input.postgresConfig.tables
+    # - Use these triggers and the event table to enable change polling
+    #
+    # Notes:
+    # - You can make the "from_to_event" table unlogged for performance
+    # - You can delete old events from this table at any time
+    # - You can review the exact SQL queries used here:
+    #   https://github.com/gustapinto/from-to/blob/main/internal/connectors/postgres/queries.go
+    postgresConfig:
+      # PostgreSQL DSN (connection string). The user must have permissions to create tables, triggers, and functions.
+      dsn: "postgres://from-to-user:from-to-passw@localhost:5432/from-to-db?sslmode=disable"
 
-    # How often to poll for new changes, in seconds (default: 30)
-    pollSeconds: 5
+      # The maximum time that any query should take to complete (default: 30)
+      timeoutSeconds: 5
 
-    # Maximum number of records to process per polling cycle (default: 50)
-    pollLimit: 10
+      # How often to poll for new changes, in seconds (default: 30)
+      pollSeconds: 5
 
-    # List of table names to monitor for changes
-    tables:
-      - "sales"
+      # Maximum number of records to process per polling cycle (default: 50)
+      pollLimit: 10
 
-# Output destination configuration
-outputs:
-  # Define an output target, referenced by name in the channels section
-  salesKafkaOutput:
-    # Type of output connector. Currently supported: [kafka, webhook]
-    connector: "kafka"
+      # List of table names to monitor for changes
+      tables:
+        - "sales"
 
-    # Kafka-specific configuration. Used when connector is set to "kafka"
-    kafkaConfig:
-      # Kafka bootstrap server addresses
-      bootstrapServers:
-        - "localhost:9094"
+  # Output destination configuration
+  outputs:
+    # Define an output target, referenced by name in the channels section
+    salesKafkaOutput:
+      # Type of output connector. Currently supported: [kafka, webhook]
+      connector: "kafka"
 
-      # Kafka topic to publish to
-      topic:
-        name: "publicSales"        # Name of the Kafka topic
-        partitions: 3              # Number of partitions (optional, default: 3)
-        replicationFactor: 1      # Replication factor (optional, default: 1)
+      # Kafka-specific configuration. Used when connector is set to "kafka"
+      kafkaConfig:
+        # Kafka bootstrap server addresses
+        bootstrapServers:
+          - "localhost:9094"
 
-  salesWebOutput:
-    connector: "webhook"
+        # Kafka topic to publish to
+        topic:
+          name: "publicSales"        # Name of the Kafka topic
+          partitions: 3              # Number of partitions (optional, default: 3)
+          replicationFactor: 1      # Replication factor (optional, default: 1)
 
-    # Webhook-specific configuration. Used when connector is set to "webhook"
-    webhookConfig:
-      # Webhook url, must accept POST with JOSN body and return an empty 204 response
-      url: "https://webhook.site/d89d005e-fe28-41eb-986e-e950a88e6ccc"
-      requestTimeout: 15 # The maximum time that any request should take to complete (default: 30)
-      retries: 5 # Number of retries of a failed request, aka. non 204 return, set to 0 to dont retry (optional, default: 3)
-      headers: # Optional headers to be included in the request
-        x-custom-origin: "from-to"
-        x-custom-info: "some info"
+    salesWebOutput:
+      connector: "webhook"
 
-# Data transformation (mapper) configuration
-mappers:
-  # Define a mapper, referenced by name in the channels section
-  salesMapper:
-    # Type of mapper. Currently supported: [lua]
-    type: "lua"
+      # Webhook-specific configuration. Used when connector is set to "webhook"
+      webhookConfig:
+        # Webhook url, must accept POST with JOSN body and return an empty 204 response
+        url: "https://webhook.site/d89d005e-fe28-41eb-986e-e950a88e6ccc"
+        requestTimeout: 15 # The maximum time that any request should take to complete (default: 30)
+        retries: 5 # Number of retries of a failed request, aka. non 204 return, set to 0 to dont retry (optional, default: 3)
+        headers: # Optional headers to be included in the request
+          x-custom-origin: "from-to"
+          x-custom-info: "some info"
 
-    # Lua-specific configuration. Used when type is "lua"
-    luaConfig:
-      # Path to the Lua script file
-      filePath: "./example/mappers_example.lua"
+  # Data transformation (mapper) configuration
+  mappers:
+    # Define a mapper, referenced by name in the channels section
+    salesMapper:
+      # Type of mapper. Currently supported: [lua]
+      type: "lua"
 
-      # Function name inside the Lua file that will handle the transformation
-      function: "map_sales_event_with_http"
+      # Lua-specific configuration. Used when type is "lua"
+      luaConfig:
+        # Path to the Lua script file
+        filePath: "./example/mappers_example.lua"
 
-  salesInlineMapper:
-    type: "lua"
+        # Function name inside the Lua file that will handle the transformation
+        function: "map_sales_event_with_http"
 
-    luaConfig:
-      function: "map_event"
+    salesInlineMapper:
+      type: "lua"
 
-      # Inline Lua code, will be used over filePath if both are present (optional, default: null)
-      source: |-
-        function map_event(event)
-          return {
-            ['data'] = event['row'],
-            ['meta'] = {
-              ['event'] = {
-                ['id'] = event['id'],
-                ['op'] = event['op'],
-                ['ts'] = event['ts'],
-                ['table'] = event['table'],
-              },
+      luaConfig:
+        function: "map_event"
+
+        # Inline Lua code, will be used over filePath if both are present (optional, default: null)
+        source: |-
+          function map_event(event)
+            return {
+              ['data'] = event['row'],
+              ['meta'] = {
+                ['event'] = {
+                  ['id'] = event['id'],
+                  ['op'] = event['op'],
+                  ['ts'] = event['ts'],
+                  ['table'] = event['table'],
+                },
+              }
             }
-          }
-        end
+          end
 
-# Channel definitions — this is where you wire together input, mapper, and output
-channels:
-  # Define a channel (pipeline) by name
-  salesKafkaChannel:
-    # Source table to read changes from (must match one of input.postgresConfig.tables)
-    from: "sales"
+  # Channel definitions — this is where you wire together input, mapper, and output
+  channels:
+    # Define a channel (pipeline) by name
+    salesKafkaChannel:
+      # Source table to read changes from (must match one of input.postgresConfig.tables)
+      from: "sales"
 
-    # Destination name (e.g., Kafka topic)
-    to: "salesKafkaOutput"
+      # Destination name (e.g., Kafka topic)
+      to: "salesKafkaOutput"
 
-    # Mapper to transform data before sending (optional)
-    mapper: "salesMapper"
+      # Mapper to transform data before sending (optional)
+      mapper: "salesMapper"
 
-  salesWebhookChannel:
-    from: "sales"
-    to: "salesWebOutput"
-    mapper: "salesInlineMapper"
+    salesWebhookChannel:
+      from: "sales"
+      to: "salesWebOutput"
+      mapper: "salesInlineMapper"

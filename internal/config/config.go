@@ -21,6 +21,11 @@ const (
 	_typeWebhook  = "webhook"
 )
 
+type Manifest struct {
+	Version uint64 `yaml:"version"`
+	Config  Config `yaml:"config"`
+}
+
 type Config struct {
 	Input    Input                    `yaml:"input"`
 	Outputs  map[string]Output        `yaml:"outputs"`
@@ -112,17 +117,17 @@ func isEmpty(str string) bool {
 	return len(strings.TrimSpace(str)) == 0
 }
 
-func getConfigFromFile(configPath string) (*Config, error) {
-	if isEmpty(configPath) {
+func readManifestFromFile(path string) (*Manifest, error) {
+	if isEmpty(path) {
 		return nil, errors.New("missing or empty -config=* param")
 	}
 
-	ext := strings.ToLower(filepath.Ext(configPath))
+	ext := strings.ToLower(filepath.Ext(path))
 	if ext != ".yml" && ext != ".yaml" {
 		return nil, errors.New("config must have a .yml or .yaml extension")
 	}
 
-	configAbsPath, err := filepath.Abs(configPath)
+	configAbsPath, err := filepath.Abs(path)
 	if err != nil {
 		return nil, err
 	}
@@ -132,11 +137,28 @@ func getConfigFromFile(configPath string) (*Config, error) {
 		return nil, err
 	}
 
-	var config Config
-	err = yaml.Unmarshal(configBytes, &config)
+	var manifest Manifest
+	if err := yaml.Unmarshal(configBytes, &manifest); err != nil {
+		return nil, err
+	}
+
+	return &manifest, nil
+}
+
+func getConfigFromFile(path string) (*Config, error) {
+	manifest, err := readManifestFromFile(path)
 	if err != nil {
 		return nil, err
 	}
 
-	return &config, nil
+	version := manifest.Version
+	if version == 0 {
+		version = 1
+	}
+
+	if version == 1 {
+		return &manifest.Config, nil
+	}
+
+	return nil, errors.New("invalid config")
 }
