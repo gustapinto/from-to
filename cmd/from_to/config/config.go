@@ -8,6 +8,7 @@ import (
 
 	"github.com/gustapinto/from-to/internal/connectors/kafka"
 	"github.com/gustapinto/from-to/internal/connectors/postgres"
+	"github.com/gustapinto/from-to/internal/connectors/webhook"
 	"github.com/gustapinto/from-to/internal/event"
 	"github.com/gustapinto/from-to/internal/mappers/lua"
 	"gopkg.in/yaml.v2"
@@ -17,6 +18,7 @@ const (
 	_typePostgres = "postgres"
 	_typeKafka    = "kafka"
 	_typeLua      = "lua"
+	_typeWebhook  = "webhook"
 )
 
 type Config struct {
@@ -32,8 +34,9 @@ type Input struct {
 }
 
 type Output struct {
-	Connector   string       `yaml:"connector"`
-	KafkaConfig kafka.Config `yaml:"kafkaConfig"`
+	Connector     string         `yaml:"connector"`
+	KafkaConfig   kafka.Config   `yaml:"kafkaConfig"`
+	WebHookConfig webhook.Config `yaml:"webhookConfig"`
 }
 
 type Mapper struct {
@@ -45,6 +48,13 @@ func LoadConfigFromYamlFile(configPath *string) (*Config, error) {
 	config, err := getConfigFromFile(*configPath)
 	if err != nil {
 		return nil, err
+	}
+
+	if config.Channels != nil {
+		for key, channel := range config.Channels {
+			channel.Key = key
+			config.Channels[key] = channel
+		}
 	}
 
 	return config, nil
@@ -85,6 +95,9 @@ func GetPublishers(config Config) (publishers map[string]event.Publisher, err er
 			if err != nil {
 				return nil, err
 			}
+
+		case _typeWebhook:
+			publishers[key] = webhook.NewPublisher(o.WebHookConfig)
 		}
 	}
 
@@ -92,15 +105,7 @@ func GetPublishers(config Config) (publishers map[string]event.Publisher, err er
 }
 
 func GetChannels(config Config) (channels map[string]event.Channel, err error) {
-	channels = make(map[string]event.Channel, len(config.Channels))
-
-	for key, channel := range config.Channels {
-		channel.Key = key
-
-		channels[key] = channel
-	}
-
-	return channels, nil
+	return config.Channels, nil
 }
 
 func isEmpty(str string) bool {

@@ -9,5 +9,5 @@ type Listener interface {
 }
 
 type Publisher interface {
-	Publish(Event, []byte, string) error
+	Publish(event Event, payload []byte) error
 }

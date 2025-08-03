@@ -7,6 +7,6 @@ type TopicConfig struct {
 }
 
 type Config struct {
-	BootstrapServers []string      `yaml:"bootstrapServers"`
-	Topics           []TopicConfig `yaml:"topics"`
+	BootstrapServers []string    `yaml:"bootstrapServers"`
+	Topic            TopicConfig `yaml:"topic"`
 }

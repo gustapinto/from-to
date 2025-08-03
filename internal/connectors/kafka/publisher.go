@@ -13,14 +13,16 @@ import (
 )
 
 type Publisher struct {
-	client *kgo.Client
-	adm    *kadm.Client
-	logger *slog.Logger
+	topicName string
+	client    *kgo.Client
+	adm       *kadm.Client
+	logger    *slog.Logger
 }
 
 func NewPublisher(config Config) (c *Publisher, err error) {
 	c = &Publisher{
-		logger: slog.With("publisher", "Kafka"),
+		topicName: config.Topic.Name,
+		logger:    slog.With("publisher", "Kafka"),
 	}
 
 	client, err := c.setupClient(config.BootstrapServers)
@@ -31,24 +33,21 @@ func NewPublisher(config Config) (c *Publisher, err error) {
 	c.client = client
 	c.adm = kadm.NewClient(client)
 
-	for _, topic := range config.Topics {
-		if err := c.setupTopic(topic); err != nil {
-			return nil, err
-		}
-
-		c.logger.Debug("Topic setup completed", "topic", topic.Name)
+	if err := c.setupTopic(config.Topic); err != nil {
+		return nil, err
 	}
 
+	c.logger.Debug("Topic setup completed", "topic", config.Topic.Name)
 	c.logger.Info("Connector setup completed")
 
 	return c, nil
 }
 
-func (c *Publisher) Publish(e event.Event, payload []byte, topic string) error {
+func (c *Publisher) Publish(e event.Event, payload []byte) error {
 	record := kgo.Record{
 		Key:   []byte(strconv.Itoa(int(e.ID))),
 		Value: payload,
-		Topic: topic,
+		Topic: c.topicName,
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
@@ -61,7 +60,7 @@ func (c *Publisher) Publish(e event.Event, payload []byte, topic string) error {
 	c.logger.Debug(
 		"Row published",
 		"key", string(record.Key),
-		"topic", topic,
+		"topic", c.topicName,
 		"payload", string(payload),
 	)
 

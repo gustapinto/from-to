@@ -78,7 +78,7 @@ func (p *Processor) publishEventOnChannel(e Event, channel Channel) error {
 		return err
 	}
 
-	if err := publisher.Publish(e, payload, channel.To); err != nil {
+	if err := publisher.Publish(e, payload); err != nil {
 		return err
 	}
 
@@ -86,11 +86,11 @@ func (p *Processor) publishEventOnChannel(e Event, channel Channel) error {
 }
 
 func (p *Processor) getPublisher(channel Channel) (Publisher, error) {
-	publisher, exists := p.publishers[channel.Output]
+	publisher, exists := p.publishers[channel.To]
 	if !exists {
 		return nil, fmt.Errorf(
 			"failed to publish event, publisher [%s] dont exists",
-			channel.Output)
+			channel.To)
 	}
 
 	return publisher, nil
