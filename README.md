@@ -26,7 +26,7 @@ The pre-built binaries for **FromTo** are available in the [releases page](https
 ## Example usage
 
 ```bash
-./from_to_linux_amd64 -config=./from_to.yaml
+./from_to_linux_amd64 -manifest=./from_to.yaml
 ```
 
 ## Example config
