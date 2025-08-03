@@ -5,7 +5,7 @@ type Mapper interface {
 }
 
 type Listener interface {
-	Listen(func(event Event) error) error
+	Listen(func(event Event, channels []Channel) error) error
 }
 
 type Publisher interface {
