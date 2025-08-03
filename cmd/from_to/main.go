@@ -7,6 +7,7 @@ import (
 	"os"
 
 	"github.com/gustapinto/from-to/cmd/from_to/config"
+	"github.com/gustapinto/from-to/cmd/from_to/logging"
 	"github.com/gustapinto/from-to/internal/event"
 )
 
@@ -18,14 +19,14 @@ func main() {
 }
 
 func run() error {
-	configPath := flag.String("config", "", "The configuration file path (ex: -config=./example/config.yaml)")
+	configPath := flag.String("config", "from_to.yaml", "The configuration file path")
+	logFormat := flag.String("logFormat", "text", "The logging format, one of [text, json]")
+	noColor := flag.Bool("noColor", false, "Use to disable colored logging, only valid for text logFormat")
 	isDebug := flag.Bool("debug", false, "Use to enable debug level logging")
 	flag.Parse()
 
-	if *isDebug {
-		slog.SetLogLoggerLevel(slog.LevelDebug)
-	} else {
-		slog.SetLogLoggerLevel(slog.LevelInfo)
+	if err := logging.SetupSlog(*isDebug, *noColor, *logFormat); err != nil {
+		return err
 	}
 
 	cfg, err := config.LoadConfigFromYamlFile(configPath)

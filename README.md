@@ -26,7 +26,7 @@ The pre-built binaries for **FromTo** are available in the [releases page](https
 ## Example usage
 
 ```bash
-./from_to_linux_amd64 -config=./postgres_kafka_example_config.yaml
+./from_to_linux_amd64 -config=./from_to.yaml
 ```
 
 ## Example config
