@@ -81,20 +81,10 @@ func (c *Publisher) setupClient(bootstrapServers []string) (*kgo.Client, error) 
 }
 
 func (c *Publisher) setupTopic(topic TopicConfig) error {
-	partitions := topic.Partitions
-	if partitions == 0 {
-		partitions = 3
-	}
-
-	replicationFactor := topic.ReplicationFactor
-	if replicationFactor == 0 {
-		replicationFactor = 1
-	}
-
 	_, err := c.adm.CreateTopic(
 		context.Background(),
-		partitions,
-		replicationFactor,
+		topic.PartitionsOrDefault(),
+		topic.ReplicationFactorOrDefault(),
 		map[string]*string{},
 		topic.Name)
 	if err != nil {

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"time"
 
 	"github.com/gustapinto/from-to/internal/event"
 )
@@ -19,22 +18,12 @@ type Publisher struct {
 }
 
 func NewPublisher(config Config) *Publisher {
-	headers := config.Headers
-	if headers == nil {
-		headers = map[string]string{}
-	}
-
-	timeout := time.Duration(config.TimeoutSeconds) * time.Second
-	if timeout == 0 {
-		timeout = 30 * time.Second
-	}
-
 	return &Publisher{
 		url:     config.URL,
-		retries: config.Retries,
-		headers: headers,
+		retries: config.RetriesOrDefault(),
+		headers: config.HeadersOrDefault(),
 		client: &http.Client{
-			Timeout: timeout,
+			Timeout: config.TimeoutSecondsOrDefault(),
 		},
 		logger: slog.With("publisher", "Webhook"),
 	}

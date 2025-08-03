@@ -12,20 +12,20 @@ import (
 )
 
 func main() {
-	if err := run(); err != nil {
-		slog.Error(err.Error())
-		os.Exit(1)
-	}
-}
-
-func run() error {
 	configPath := flag.String("config", "from_to.yaml", "The configuration file path")
 	logFormat := flag.String("logFormat", "text", "The logging format, one of [text, json]")
 	noColor := flag.Bool("noColor", false, "Use to disable colored logging, only valid for text logFormat")
 	isDebug := flag.Bool("debug", false, "Use to enable debug level logging")
 	flag.Parse()
 
-	if err := logging.SetupSlog(*isDebug, *noColor, *logFormat); err != nil {
+	if err := run(*configPath, *logFormat, *noColor, *isDebug); err != nil {
+		slog.Error(err.Error())
+		os.Exit(1)
+	}
+}
+
+func run(configPath, logFormat string, noColor, isDebug bool) error {
+	if err := logging.SetupSlog(isDebug, noColor, logFormat); err != nil {
 		return err
 	}
 
@@ -34,7 +34,7 @@ func run() error {
 		return fmt.Errorf("Failed to load config file, got error %s", err.Error())
 	}
 
-	slog.Info("Loaded application config from file", "configPath", *configPath)
+	slog.Info("Loaded application config from file", "configPath", configPath)
 
 	listener, err := config.GetListener(*cfg)
 	if err != nil {
@@ -60,5 +60,9 @@ func run() error {
 
 	slog.Info("Application started, listening for new rows to process")
 
-	return processor.ListenAndProcess()
+	if err := processor.ListenAndProcess(); err != nil {
+		return fmt.Errorf("Failed to listen and process, got error %s", err.Error())
+	}
+
+	return nil
 }

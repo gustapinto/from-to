@@ -58,7 +58,7 @@ outputs:
       # Webhook url, must accept POST with JOSN body and return an empty 204 response
       url: "https://webhook.site/d89d005e-fe28-41eb-986e-e950a88e6ccc"
       requestTimeout: 15 # The maximum time that any request should take to complete (default: 30)
-      retries: 3 # Number of retries of a failed request (aka. non 204 return)
+      retries: 5 # Number of retries of a failed request, aka. non 204 return, set to 0 to dont retry (optional, default: 3)
       headers: # Optional headers to be included in the request
         x-custom-origin: "from-to"
         x-custom-info: "some info"
@@ -73,10 +73,32 @@ mappers:
     # Lua-specific configuration. Used when type is "lua"
     luaConfig:
       # Path to the Lua script file
-      filePath: "./example/mappers.lua"
+      filePath: "./example/mappers_example.lua"
 
       # Function name inside the Lua file that will handle the transformation
       function: "map_sales_event_with_http"
+
+  salesInlineMapper:
+    type: "lua"
+
+    luaConfig:
+      function: "map_event"
+
+      # Inline Lua code, will be used over filePath if both are present (optional, default: null)
+      source: |-
+        function map_event(event)
+          return {
+            ['data'] = event['row'],
+            ['meta'] = {
+              ['event'] = {
+                ['id'] = event['id'],
+                ['op'] = event['op'],
+                ['ts'] = event['ts'],
+                ['table'] = event['table'],
+              },
+            }
+          }
+        end
 
 # Channel definitions — this is where you wire together input, mapper, and output
 channels:
@@ -94,4 +116,4 @@ channels:
   salesWebhookChannel:
     from: "sales"
     to: "salesWebOutput"
-    mapper: "salesMapper"
+    mapper: "salesInlineMapper"

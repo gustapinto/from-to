@@ -44,8 +44,8 @@ type Mapper struct {
 	LuaConfig lua.Config `yaml:"luaConfig"`
 }
 
-func LoadConfigFromYamlFile(configPath *string) (*Config, error) {
-	config, err := getConfigFromFile(*configPath)
+func LoadConfigFromYamlFile(configPath string) (*Config, error) {
+	config, err := getConfigFromFile(configPath)
 	if err != nil {
 		return nil, err
 	}
