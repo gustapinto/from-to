@@ -30,20 +30,22 @@ func NewProcessor(
 	}
 }
 
-func (s *Processor) ListenAndProcess() error {
-	return s.listener.Listen(s.publishEventToAllChannels)
+func (p *Processor) ListenAndProcess() error {
+	return p.listener.Listen(p.publishEventToAllChannels)
 }
 
-func (s *Processor) publishEventToAllChannels(e Event) error {
+func (p *Processor) publishEventToAllChannels(e Event, channels []Channel) error {
 	var wg sync.WaitGroup
-	for _, channel := range e.Channels {
+	for _, channel := range channels {
 		wg.Add(1)
+
+		p.logger.Debug("Publishing to channel", "event", e, "channel", channel.Key)
 
 		go func() {
 			defer wg.Done()
 
-			if err := s.publishEventOnChannel(e, channel); err != nil {
-				s.logger.Error(
+			if err := p.publishEventOnChannel(e, channel); err != nil {
+				p.logger.Error(
 					"Failed to process event for channel",
 					"event", e.ID,
 					"channel", channel.Key,
@@ -52,8 +54,8 @@ func (s *Processor) publishEventToAllChannels(e Event) error {
 				return
 			}
 
-			s.logger.Debug(
-				"Event processed for channel",
+			p.logger.Debug(
+				"Event published for channel",
 				"event", e.ID,
 				"channel", channel.Key,
 			)
@@ -65,13 +67,13 @@ func (s *Processor) publishEventToAllChannels(e Event) error {
 	return nil
 }
 
-func (s *Processor) publishEventOnChannel(e Event, channel Channel) error {
-	publisher, err := s.getPublisher(channel)
+func (p *Processor) publishEventOnChannel(e Event, channel Channel) error {
+	publisher, err := p.getPublisher(channel)
 	if err != nil {
 		return err
 	}
 
-	payload, err := s.getPayload(e, channel)
+	payload, err := p.getPayload(e, channel)
 	if err != nil {
 		return err
 	}
@@ -83,8 +85,8 @@ func (s *Processor) publishEventOnChannel(e Event, channel Channel) error {
 	return nil
 }
 
-func (s *Processor) getPublisher(channel Channel) (Publisher, error) {
-	publisher, exists := s.publishers[channel.Output]
+func (p *Processor) getPublisher(channel Channel) (Publisher, error) {
+	publisher, exists := p.publishers[channel.Output]
 	if !exists {
 		return nil, fmt.Errorf(
 			"failed to publish event, publisher [%s] dont exists",
@@ -94,8 +96,8 @@ func (s *Processor) getPublisher(channel Channel) (Publisher, error) {
 	return publisher, nil
 }
 
-func (s *Processor) getPayload(e Event, channel Channel) ([]byte, error) {
-	mapper, exists := s.mappers[channel.Mapper]
+func (p *Processor) getPayload(e Event, channel Channel) ([]byte, error) {
+	mapper, exists := p.mappers[channel.Mapper]
 	if exists {
 		return mapper.Map(e)
 	}

@@ -1,7 +1,9 @@
 package postgres
 
 type Config struct {
-	PollSeconds int64    `yaml:"pollSeconds"`
-	DSN         string   `yaml:"dsn"`
-	Tables      []string `yaml:"tables"`
+	TimeoutSeconds uint64   `yaml:"timeoutSeconds"`
+	PollSeconds    uint64   `yaml:"pollSeconds"`
+	PollLimit      uint64   `yaml:"pollLimit"`
+	DSN            string   `yaml:"dsn"`
+	Tables         []string `yaml:"tables"`
 }

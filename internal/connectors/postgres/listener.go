@@ -4,16 +4,18 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
 
 	"github.com/gustapinto/from-to/internal/event"
-	"github.com/lib/pq"
+	_ "github.com/lib/pq"
 )
 
 type Listener struct {
 	dsn                    string
+	limit                  uint64
 	waitSeconds            time.Duration
 	timeout                time.Duration
 	db                     *sql.DB
@@ -27,10 +29,21 @@ func NewListener(config Config, channels map[string]event.Channel) (*Listener, e
 		waitSeconds = time.Duration(30) * time.Second
 	}
 
+	timeoutSeconds := time.Duration(config.TimeoutSeconds) * time.Second
+	if timeoutSeconds == 0 {
+		timeoutSeconds = time.Duration(30) * time.Second
+	}
+
+	limit := config.PollLimit
+	if limit == 0 {
+		limit = 50
+	}
+
 	listener := &Listener{
 		dsn:         config.DSN,
+		limit:       limit,
 		waitSeconds: waitSeconds,
-		timeout:     1 * time.Minute,
+		timeout:     timeoutSeconds,
 		logger:      slog.With("listener", "Postgres"),
 	}
 
@@ -48,28 +61,35 @@ func NewListener(config Config, channels map[string]event.Channel) (*Listener, e
 	return listener, nil
 }
 
-func (c *Listener) Listen(callback func(event.Event) error) error {
-	listener := pq.NewListener(c.dsn, 1*time.Second, 10*time.Second, nil)
-	defer listener.Close()
-
-	if err := listener.Listen("from_to_event_notifications"); err != nil {
-		return err
-	}
+func (l *Listener) Listen(callback func(event.Event, []event.Channel) error) error {
+	limit := uint64(50)
 
 	for {
-		select {
-		case n := <-listener.Notify:
-			if err := c.handleNotification(n, callback); err != nil {
-				c.logger.Error(err.Error())
+		events, err := l.getEventsToSend(limit)
+		if err != nil {
+			return err
+		}
+
+		if len(events) > 0 {
+			l.logger.Info(fmt.Sprintf("Processing %d events", len(events)))
+		}
+
+		for _, e := range events {
+			if err := l.publishEvent(e, callback); err != nil {
+				return err
 			}
 
-		case <-time.After(c.waitSeconds):
-			c.logger.Debug("Waiting for new rows", "waitSeconds", c.waitSeconds)
+			if err := l.setEventAsSent(e); err != nil {
+				return err
+			}
 		}
+
+		l.logger.Info("Waiting for new rows")
+		time.Sleep(l.waitSeconds)
 	}
 }
 
-func (c *Listener) connectToDatabase(dsn string) error {
+func (l *Listener) connectToDatabase(dsn string) error {
 	db, err := sql.Open("postgres", dsn)
 	if err != nil {
 		return err
@@ -78,212 +98,147 @@ func (c *Listener) connectToDatabase(dsn string) error {
 		return err
 	}
 
-	c.db = db
+	l.db = db
 
-	c.logger.Debug("Connected to database", "dsn", dsn)
+	l.logger.Debug("Connected to database", "dsn", dsn)
 	return nil
 }
 
-func (c *Listener) setupDatabaseSchema(config Config) error {
-	tx, err := c.db.Begin()
+func (l *Listener) transaction(callback func(tx *sql.Tx) error) error {
+	l.logger.Debug("Opening transaction")
+
+	tx, err := l.db.Begin()
 	if err != nil {
 		return err
 	}
 
-	if err := c.setupEventsTable(tx); err != nil {
-		tx.Rollback()
+	if err := callback(tx); err != nil {
+		if rollErr := tx.Rollback(); rollErr != nil {
+			return errors.Join(rollErr)
+		}
+
 		return err
 	}
 
-	c.logger.Debug("Schema and trigger setup complete")
+	return tx.Commit()
+}
 
-	for _, table := range config.Tables {
-		if err := c.setupTable(tx, table); err != nil {
-			tx.Rollback()
+func (l *Listener) setupDatabaseSchema(config Config) error {
+	return l.transaction(func(tx *sql.Tx) error {
+		if err := l.setupEventsTable(tx); err != nil {
 			return err
 		}
 
-		c.logger.Debug("Table setup complete", "table", table)
-	}
+		l.logger.Debug("Schema and trigger setup complete")
 
-	if err := tx.Commit(); err != nil {
-		return err
-	}
+		for _, table := range config.Tables {
+			if err := l.setupTableTrigger(tx, table); err != nil {
+				return err
+			}
 
-	return nil
+			l.logger.Debug("Table setup complete", "table", table)
+		}
+
+		return nil
+	})
 }
 
-func (c *Listener) setupTableToChannelRelation(channels map[string]event.Channel) {
-	c.tableToChannelRelation = make(map[string][]event.Channel, len(channels))
+func (l *Listener) setupTableToChannelRelation(channels map[string]event.Channel) {
+	l.tableToChannelRelation = make(map[string][]event.Channel, len(channels))
 
 	for _, channel := range channels {
-		c.tableToChannelRelation[channel.From] = append(
-			c.tableToChannelRelation[channel.From],
+		l.tableToChannelRelation[channel.From] = append(
+			l.tableToChannelRelation[channel.From],
 			channel,
 		)
 	}
 }
 
-func (c *Listener) setupEventsTable(tx *sql.Tx) error {
-	const query = `
-	CREATE TABLE IF NOT EXISTS "from_to_event" (
-		"id" BIGSERIAL PRIMARY KEY,
-		"op" CHAR(1) NOT NULL,
-		"table" VARCHAR(255) NOT NULL,
-		"row" JSONB NOT NULL,
-		"ts" BIGINT NOT NULL
-	);
-
-	CREATE OR REPLACE FUNCTION "from_to_process_event"()
-	RETURNS TRIGGER
-	AS $$
-	BEGIN
-		IF (TG_OP = 'DELETE') THEN
-			INSERT INTO "from_to_event" (
-				"op",
-				"table",
-				"row",
-				"ts"
-			)
-			SELECT
-				'D',
-				TG_TABLE_NAME,
-				row_to_json(OLD.*),
-				(extract(epoch from now()));
-		ELSIF (TG_OP = 'UPDATE') THEN
-			INSERT INTO "from_to_event" (
-				"op",
-				"table",
-				"row",
-				"ts"
-			)
-			SELECT
-				'U',
-				TG_TABLE_NAME,
-				row_to_json(NEW.*),
-				(extract(epoch from now()));
-		ELSIF (TG_OP = 'INSERT') THEN
-			INSERT INTO "from_to_event" (
-				"op",
-				"table",
-				"row",
-				"ts"
-			)
-			SELECT
-				'I',
-				TG_TABLE_NAME,
-				row_to_json(NEW.*),
-				(extract(epoch from now()));
-		END IF;
-		RETURN NULL;
-	END
-	$$ LANGUAGE PLPGSQL;
-
-	CREATE OR REPLACE FUNCTION "from_to_notify_event"()
-	RETURNS TRIGGER as $$
-	BEGIN
-		PERFORM PG_NOTIFY('from_to_event_notifications', NEW.id::text);
-		RETURN NULL;
-	END
-	$$ LANGUAGE PLPGSQL;
-
-	CREATE OR REPLACE TRIGGER "from_to_event_notidy_event_trigger"
-	AFTER INSERT ON "from_to_event"
-	FOR EACH ROW EXECUTE FUNCTION from_to_notify_event();
-	`
-
-	ctx, cancel := context.WithTimeout(context.Background(), c.timeout)
+func (l *Listener) setupEventsTable(tx *sql.Tx) error {
+	ctx, cancel := context.WithTimeout(context.Background(), l.timeout)
 	defer cancel()
 
-	_, err := tx.ExecContext(ctx, query)
-	if err != nil {
+	if _, err := tx.ExecContext(ctx, setupFromToEventTableQuery); err != nil {
+		return err
+	}
+
+	if _, err := tx.ExecContext(ctx, setupFromToProcessEventFunctionQuery); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-func (c *Listener) setupTable(tx *sql.Tx, table string) error {
-	query := `
-	CREATE OR REPLACE TRIGGER %s
-	AFTER INSERT OR UPDATE OR DELETE ON %s
-	FOR EACH ROW EXECUTE FUNCTION from_to_process_event()
-	`
-
+func (l *Listener) setupTableTrigger(tx *sql.Tx, table string) error {
 	triggerName := fmt.Sprintf("from_to_%s_process_event_trigger", table)
-	query = fmt.Sprintf(query, triggerName, table)
+	query := fmt.Sprintf(setupTableTriggerPartialQuery, triggerName, table)
 
-	ctx, cancel := context.WithTimeout(context.Background(), c.timeout)
+	ctx, cancel := context.WithTimeout(context.Background(), l.timeout)
 	defer cancel()
 
-	_, err := tx.ExecContext(ctx, query)
-	if err != nil {
+	if _, err := tx.ExecContext(ctx, query); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-func (c *Listener) handleNotification(n *pq.Notification, callback func(event.Event) error) error {
-	if n == nil {
-		return fmt.Errorf("Failed to process nil row")
-	}
+func (l *Listener) getEventsToSend(limit uint64) ([]event.Event, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), l.timeout)
+	defer cancel()
 
-	var id int64
-	if err := json.Unmarshal([]byte(n.Extra), &id); err != nil {
-		return fmt.Errorf("Failed to process received row, got error %s", err.Error())
-	}
-
-	c.logger.Info("Processing received row", "id", id)
-
-	event, err := c.getEvent(id)
+	rows, err := l.db.QueryContext(ctx, getEventsToSendQuery, limit)
 	if err != nil {
-		return fmt.Errorf("Failed to process received row, got error %s", err.Error())
+		return nil, err
+	}
+	defer rows.Close()
+
+	var events []event.Event
+	for rows.Next() {
+		var e event.Event
+		var data []byte
+		if err := rows.Scan(&e.ID, &e.Op, &e.Table, &data, &e.Ts, &e.Sent); err != nil {
+			return nil, err
+		}
+
+		if err := json.Unmarshal(data, &e.Row); err != nil {
+			return nil, err
+		}
+
+		events = append(events, e)
 	}
 
-	c.logger.Debug("Row processed into event", "event", event)
+	return events, nil
+}
 
-	if err := callback(event); err != nil {
+func (l *Listener) setEventAsSent(e event.Event) error {
+	ctx, cancel := context.WithTimeout(context.Background(), l.timeout)
+	defer cancel()
+
+	if _, err := l.db.ExecContext(ctx, setEventAsSentQuery, e.ID); err != nil {
+		return err
+	}
+
+	l.logger.Debug("Marked event as sent", "event", e)
+
+	return nil
+}
+
+func (l *Listener) publishEvent(e event.Event, callback func(event.Event, []event.Channel) error) error {
+	l.logger.Debug("Publishing event", "event", e)
+	l.logger.Debug("Getting channels to publish")
+
+	channels, ok := l.tableToChannelRelation[e.Table]
+	if !ok {
+		l.logger.Warn("Table does not have any configured channel, skipping", "id", e.ID, "table", e.Table)
+		return nil
+	}
+
+	l.logger.Debug("Calling publish event callback", "event", e, "channels", channels)
+
+	if err := callback(e, channels); err != nil {
 		return fmt.Errorf("Failed to publish event, got error %s", err.Error())
 	}
 
 	return nil
-}
-
-func (c *Listener) getEvent(id int64) (e event.Event, err error) {
-	const query = `
-	SELECT
-		fte.id,
-		fte.op,
-		fte.table,
-		fte.row,
-		fte.ts
-	FROM
-		from_to_event fte
-	WHERE
-		fte.id = $1
-	`
-
-	ctx, cancel := context.WithTimeout(context.Background(), c.timeout)
-	defer cancel()
-
-	row := c.db.QueryRowContext(ctx, query, id)
-	if row.Err() != nil {
-		return event.Event{}, row.Err()
-	}
-
-	var data []byte
-	if err := row.Scan(&e.ID, &e.Op, &e.Table, &data, &e.Ts); err != nil {
-		return event.Event{}, err
-	}
-
-	if err := json.Unmarshal(data, &e.Row); err != nil {
-		return event.Event{}, err
-	}
-
-	if channels, exists := c.tableToChannelRelation[e.Table]; exists {
-		copy(e.Channels, channels)
-	}
-
-	return e, nil
 }
