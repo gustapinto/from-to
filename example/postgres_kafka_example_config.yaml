@@ -5,7 +5,7 @@ input:
 
   # Configuration for PostgreSQL input. Used only if connector is set to "postgres".
   #
-  # The "From To" application will:
+  # The "FromTo" application will:
   # - Create a table named "from_to_event" and necessary triggers for each table listed in input.postgresConfig.tables
   # - Use these triggers and the event table to enable change polling
   #
