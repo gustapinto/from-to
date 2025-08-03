@@ -14,16 +14,14 @@ import (
 )
 
 type Mapper struct {
-	logger   *slog.Logger
-	filePath string
-	function string
+	logger *slog.Logger
+	config Config
 }
 
 func NewMapper(config Config) (*Mapper, error) {
 	return &Mapper{
-		logger:   slog.With("mapper", "Lua"),
-		filePath: config.FilePath,
-		function: config.Function,
+		logger: slog.With("mapper", "Lua"),
+		config: config,
 	}, nil
 }
 
@@ -34,16 +32,24 @@ func (m *Mapper) Map(e event.Event) ([]byte, error) {
 	l.PreloadModule("http", gluahttp.NewHttpModule(&http.Client{}).Loader)
 	l.PreloadModule("json", luajson.Loader)
 
-	if err := l.DoFile(m.filePath); err != nil {
-		return nil, err
-	}
+	if m.config.Source != nil {
+		if err := l.DoString(*m.config.Source); err != nil {
+			return nil, err
+		}
 
-	m.logger.Debug("Loaded lua file", "file", m.filePath)
+		m.logger.Debug("Loaded lua inline definition")
+	} else {
+		if err := l.DoFile(m.config.FilePath); err != nil {
+			return nil, err
+		}
+
+		m.logger.Debug("Loaded lua file", "file", m.config.FilePath)
+	}
 
 	eventTable := m.eventToLuaTable(l, e)
 
 	err := l.CallByParam(lua.P{
-		Fn:      l.GetGlobal(m.function).(*lua.LFunction),
+		Fn:      l.GetGlobal(m.config.Function).(*lua.LFunction),
 		NRet:    1,
 		Protect: true,
 	}, eventTable)
@@ -53,8 +59,7 @@ func (m *Mapper) Map(e event.Event) ([]byte, error) {
 
 	m.logger.Debug(
 		"Executed lua function",
-		"file", m.filePath,
-		"function", m.function,
+		"function", m.config.FilePath,
 	)
 
 	result := m.toGoValue(l.Get(-1))
@@ -70,8 +75,7 @@ func (m *Mapper) Map(e event.Event) ([]byte, error) {
 
 	m.logger.Debug(
 		"Converted lua function return to payload",
-		"file", m.filePath,
-		"function", m.function,
+		"function", m.config.Function,
 		"payload", string(payload),
 	)
 
@@ -118,6 +122,8 @@ func (m *Mapper) toLuaValue(l *lua.LState, value any) lua.LValue {
 	case int:
 		return lua.LNumber(float64(v))
 	case int64:
+		return lua.LNumber(float64(v))
+	case uint64:
 		return lua.LNumber(float64(v))
 	case float64:
 		return lua.LNumber(float64(v))

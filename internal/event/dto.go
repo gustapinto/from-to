@@ -3,8 +3,8 @@ package event
 import "fmt"
 
 type Event struct {
-	ID    int64          `json:"id,omitempty"`
-	Ts    int64          `json:"ts,omitempty"`
+	ID    uint64         `json:"id,omitempty"`
+	Ts    uint64         `json:"ts,omitempty"`
 	Op    string         `json:"op,omitempty"`
 	Table string         `json:"table,omitempty"`
 	Row   map[string]any `json:"row,omitempty"`
@@ -25,7 +25,6 @@ func (e Event) String() string {
 type Channel struct {
 	From   string `yaml:"from"`
 	To     string `yaml:"to"`
-	Output string `yaml:"output"`
 	Mapper string `yaml:"mapper"`
 
 	Key string `yaml:"-"`
@@ -33,10 +32,9 @@ type Channel struct {
 
 func (c Channel) String() string {
 	return fmt.Sprintf(
-		"Channel[From=%s, To=%s, Output=%s, Mapper=%s, Key=%s]",
+		"Channel[From=%s, To=%s, Mapper=%s, Key=%s]",
 		c.From,
 		c.To,
-		c.Output,
 		c.Mapper,
 		c.Key,
 	)

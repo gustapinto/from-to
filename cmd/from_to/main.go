@@ -6,26 +6,27 @@ import (
 	"log/slog"
 	"os"
 
-	"github.com/gustapinto/from-to/cmd/from_to/config"
+	"github.com/gustapinto/from-to/internal/config"
 	"github.com/gustapinto/from-to/internal/event"
+	"github.com/gustapinto/from-to/internal/logging"
 )
 
 func main() {
-	if err := run(); err != nil {
+	configPath := flag.String("manifest", "from_to.yaml", "The configuration manifest file path")
+	logFormat := flag.String("logFormat", "text", "The logging format, one of [text, json]")
+	noColor := flag.Bool("noColor", false, "Use to disable colored logging, only valid for text logFormat")
+	isDebug := flag.Bool("debug", false, "Use to enable debug level logging")
+	flag.Parse()
+
+	if err := run(*configPath, *logFormat, *noColor, *isDebug); err != nil {
 		slog.Error(err.Error())
 		os.Exit(1)
 	}
 }
 
-func run() error {
-	configPath := flag.String("config", "", "The configuration file path (ex: -config=./example/config.yaml)")
-	isDebug := flag.Bool("debug", false, "Use to enable debug level logging")
-	flag.Parse()
-
-	if *isDebug {
-		slog.SetLogLoggerLevel(slog.LevelDebug)
-	} else {
-		slog.SetLogLoggerLevel(slog.LevelInfo)
+func run(configPath, logFormat string, noColor, isDebug bool) error {
+	if err := logging.SetupSlog(isDebug, noColor, logFormat); err != nil {
+		return err
 	}
 
 	cfg, err := config.LoadConfigFromYamlFile(configPath)
@@ -33,7 +34,7 @@ func run() error {
 		return fmt.Errorf("Failed to load config file, got error %s", err.Error())
 	}
 
-	slog.Info("Loaded application config from file", "configPath", *configPath)
+	slog.Info("Loaded application config from file", "configPath", configPath)
 
 	listener, err := config.GetListener(*cfg)
 	if err != nil {
@@ -59,5 +60,9 @@ func run() error {
 
 	slog.Info("Application started, listening for new rows to process")
 
-	return processor.ListenAndProcess()
+	if err := processor.ListenAndProcess(); err != nil {
+		return fmt.Errorf("Failed to listen and process, got error %s", err.Error())
+	}
+
+	return nil
 }

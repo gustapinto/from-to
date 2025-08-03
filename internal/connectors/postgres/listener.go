@@ -24,26 +24,11 @@ type Listener struct {
 }
 
 func NewListener(config Config, channels map[string]event.Channel) (*Listener, error) {
-	waitSeconds := time.Duration(config.PollSeconds) * time.Second
-	if waitSeconds == 0 {
-		waitSeconds = time.Duration(30) * time.Second
-	}
-
-	timeoutSeconds := time.Duration(config.TimeoutSeconds) * time.Second
-	if timeoutSeconds == 0 {
-		timeoutSeconds = time.Duration(30) * time.Second
-	}
-
-	limit := config.PollLimit
-	if limit == 0 {
-		limit = 50
-	}
-
 	listener := &Listener{
 		dsn:         config.DSN,
-		limit:       limit,
-		waitSeconds: waitSeconds,
-		timeout:     timeoutSeconds,
+		limit:       config.LimitOrDefault(),
+		waitSeconds: config.PollSecondsOrDefault(),
+		timeout:     config.TimeoutSecondsOrDefault(),
 		logger:      slog.With("listener", "Postgres"),
 	}
 
@@ -84,7 +69,7 @@ func (l *Listener) Listen(callback func(event.Event, []event.Channel) error) err
 			}
 		}
 
-		l.logger.Info("Waiting for new rows")
+		l.logger.Info("Polling for new unsent events")
 		time.Sleep(l.waitSeconds)
 	}
 }

@@ -8,6 +8,7 @@ import (
 
 	"github.com/gustapinto/from-to/internal/connectors/kafka"
 	"github.com/gustapinto/from-to/internal/connectors/postgres"
+	"github.com/gustapinto/from-to/internal/connectors/webhook"
 	"github.com/gustapinto/from-to/internal/event"
 	"github.com/gustapinto/from-to/internal/mappers/lua"
 	"gopkg.in/yaml.v2"
@@ -17,7 +18,13 @@ const (
 	_typePostgres = "postgres"
 	_typeKafka    = "kafka"
 	_typeLua      = "lua"
+	_typeWebhook  = "webhook"
 )
+
+type Manifest struct {
+	Version uint64 `yaml:"version"`
+	Config  Config `yaml:"config"`
+}
 
 type Config struct {
 	Input    Input                    `yaml:"input"`
@@ -32,8 +39,9 @@ type Input struct {
 }
 
 type Output struct {
-	Connector   string       `yaml:"connector"`
-	KafkaConfig kafka.Config `yaml:"kafkaConfig"`
+	Connector     string         `yaml:"connector"`
+	KafkaConfig   kafka.Config   `yaml:"kafkaConfig"`
+	WebHookConfig webhook.Config `yaml:"webhookConfig"`
 }
 
 type Mapper struct {
@@ -41,10 +49,17 @@ type Mapper struct {
 	LuaConfig lua.Config `yaml:"luaConfig"`
 }
 
-func LoadConfigFromYamlFile(configPath *string) (*Config, error) {
-	config, err := getConfigFromFile(*configPath)
+func LoadConfigFromYamlFile(configPath string) (*Config, error) {
+	config, err := getConfigFromFile(configPath)
 	if err != nil {
 		return nil, err
+	}
+
+	if config.Channels != nil {
+		for key, channel := range config.Channels {
+			channel.Key = key
+			config.Channels[key] = channel
+		}
 	}
 
 	return config, nil
@@ -85,6 +100,9 @@ func GetPublishers(config Config) (publishers map[string]event.Publisher, err er
 			if err != nil {
 				return nil, err
 			}
+
+		case _typeWebhook:
+			publishers[key] = webhook.NewPublisher(o.WebHookConfig)
 		}
 	}
 
@@ -92,32 +110,24 @@ func GetPublishers(config Config) (publishers map[string]event.Publisher, err er
 }
 
 func GetChannels(config Config) (channels map[string]event.Channel, err error) {
-	channels = make(map[string]event.Channel, len(config.Channels))
-
-	for key, channel := range config.Channels {
-		channel.Key = key
-
-		channels[key] = channel
-	}
-
-	return channels, nil
+	return config.Channels, nil
 }
 
 func isEmpty(str string) bool {
 	return len(strings.TrimSpace(str)) == 0
 }
 
-func getConfigFromFile(configPath string) (*Config, error) {
-	if isEmpty(configPath) {
+func readManifestFromFile(path string) (*Manifest, error) {
+	if isEmpty(path) {
 		return nil, errors.New("missing or empty -config=* param")
 	}
 
-	ext := strings.ToLower(filepath.Ext(configPath))
+	ext := strings.ToLower(filepath.Ext(path))
 	if ext != ".yml" && ext != ".yaml" {
 		return nil, errors.New("config must have a .yml or .yaml extension")
 	}
 
-	configAbsPath, err := filepath.Abs(configPath)
+	configAbsPath, err := filepath.Abs(path)
 	if err != nil {
 		return nil, err
 	}
@@ -127,11 +137,28 @@ func getConfigFromFile(configPath string) (*Config, error) {
 		return nil, err
 	}
 
-	var config Config
-	err = yaml.Unmarshal(configBytes, &config)
+	var manifest Manifest
+	if err := yaml.Unmarshal(configBytes, &manifest); err != nil {
+		return nil, err
+	}
+
+	return &manifest, nil
+}
+
+func getConfigFromFile(path string) (*Config, error) {
+	manifest, err := readManifestFromFile(path)
 	if err != nil {
 		return nil, err
 	}
 
-	return &config, nil
+	version := manifest.Version
+	if version == 0 {
+		version = 1
+	}
+
+	if version == 1 {
+		return &manifest.Config, nil
+	}
+
+	return nil, errors.New("invalid config")
 }

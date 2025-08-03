@@ -26,7 +26,7 @@ The pre-built binaries for **FromTo** are available in the [releases page](https
 ## Example usage
 
 ```bash
-./from_to_linux_amd64 -config=./postgres_kafka_example_config.yaml
+./from_to_linux_amd64 -manifest=./from_to.yaml
 ```
 
 ## Example config
@@ -64,6 +64,15 @@ channels:
 ```
 
 Additional options and specific documentation on inputs, outputs and mappers can be found at the [examples folder](https://github.com/gustapinto/from-to/blob/main/example)
+
+## Connector support
+
+The currently supported connectors and mappers are:
+
+- **PostgreSQL (postgres):** Input connector
+- **Kafka (kafka):** Output connector
+- **Webhook (webhook):** Output connector
+- **Lua (lua):** Mapper
 
 ## Lua support
 
