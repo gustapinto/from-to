@@ -1,12 +1,17 @@
 package logging
 
 import (
-	"errors"
+	"fmt"
 	"log/slog"
 	"os"
 	"time"
 
 	"github.com/lmittmann/tint"
+)
+
+const (
+	_logFormatJson = "json"
+	_logFormatText = "text"
 )
 
 func SetupSlog(isDebug, noColor bool, logFormat string) error {
@@ -20,10 +25,10 @@ func SetupSlog(isDebug, noColor bool, logFormat string) error {
 
 	var logHandler slog.Handler
 	switch logFormat {
-	case "json":
+	case _logFormatJson:
 		logHandler = slog.NewJSONHandler(os.Stdout, logHandlerOptions)
 
-	case "text":
+	case _logFormatText:
 		logHandler = tint.NewHandler(os.Stdout, &tint.Options{
 			Level:      logHandlerOptions.Level,
 			AddSource:  logHandlerOptions.AddSource,
@@ -32,7 +37,7 @@ func SetupSlog(isDebug, noColor bool, logFormat string) error {
 		})
 
 	default:
-		return errors.New("invalid log format")
+		return fmt.Errorf("invalid log format [%s]", logFormat)
 	}
 
 	slog.SetDefault(slog.New(logHandler))
